@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@500;600&display=swap" rel="stylesheet">
+<title>Flip Clock with Night Train</title>
+<style>
+  :root {
+    --sky-top: #050a1c;
+    --sky-bottom: #14264d;
+    --card: #1b1d22;
+    --card-edge: #0c0d10;
+    --digit: #f2ead8;
+    --h: clamp(72px, 17vw, 210px);
+    --w: calc(var(--h) * 0.72);
+    --gh: clamp(44px, 8vh, 80px);
+    --th: clamp(52px, 6.2vw, 84px);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    overflow: hidden;
+    background: linear-gradient(to bottom, var(--sky-top), var(--sky-bottom));
+    font-family: Bahnschrift, "DIN Condensed", "Arial Narrow", Impact, sans-serif;
+    user-select: none;
+  }
+  #stars { position: fixed; inset: 0; width: 100%; height: 100%; }
+
+  /* ---------- Clock ---------- */
+  .stage {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 3vh 0 calc(var(--gh) + var(--th) + 2vh);
+    z-index: 3;
+  }
+  .clock {
+    display: flex; align-items: center; justify-content: center;
+    gap: calc(var(--h) * 0.14);
+    position: relative;
+  }
+  .ampm {
+    position: absolute; right: 0; top: calc(100% + var(--h) * 0.1);
+    font-family: "Highway Gothic", "FHWA Series C", "Overpass", Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif;
+    font-weight: 600; letter-spacing: .06em; font-size: calc(var(--h) * 0.16);
+    color: var(--digit); opacity: .7;
+  }
+  .date {
+    margin-top: calc(var(--h) * 0.28);
+    font-family: "Highway Gothic", "FHWA Series C", "Overpass", "Roadgeek 2005 Series C", Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif;
+    font-weight: 600; letter-spacing: .04em;
+    font-size: calc(var(--h) * 0.24);
+    color: var(--digit); opacity: .9; text-align: center;
+  }
+  .group { display: flex; gap: calc(var(--h) * 0.06); }
+  .sep { display: flex; flex-direction: column; gap: calc(var(--h) * 0.16); }
+  .sep i {
+    width: calc(var(--h) * 0.07); height: calc(var(--h) * 0.07);
+    border-radius: 50%; background: var(--digit); opacity: .85;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: .85 } 50% { opacity: .25 } }
+
+  .card {
+    position: relative; width: var(--w); height: var(--h);
+    perspective: calc(var(--h) * 3);
+    font-weight: 700; font-size: calc(var(--h) * 0.92);
+    color: var(--digit);
+    filter: drop-shadow(0 12px 18px rgba(0,0,0,.45));
+  }
+  .half, .flap {
+    position: absolute; left: 0; width: 100%; height: 50%;
+    overflow: hidden; background: var(--card);
+  }
+  .top, .flap.f-top { top: 0; border-radius: 10px 10px 0 0; border-bottom: 1px solid var(--card-edge); }
+  .bottom, .flap.f-bot { bottom: 0; border-radius: 0 0 10px 10px; background: #202328; }
+  .half span, .flap span {
+    position: absolute; left: 0; width: 100%; height: 200%;
+    line-height: var(--h); text-align: center;
+  }
+  .top span, .f-top span { top: 0; }
+  .bottom span, .f-bot span { top: -100%; }
+
+  .flap { display: none; backface-visibility: hidden; }
+  .f-top { transform-origin: bottom; z-index: 3; }
+  .f-bot { transform-origin: top; z-index: 3; transform: rotateX(90deg); }
+  .card.go .f-top { display: block; animation: flipTop .3s ease-in forwards; }
+  .card.go .f-bot { display: block; animation: flipBot .3s .3s ease-out forwards; }
+  @keyframes flipTop { to { transform: rotateX(-90deg); } }
+  @keyframes flipBot { to { transform: rotateX(0deg); } }
+
+  /* axle pin */
+  .card::before, .card::after {
+    content: ""; position: absolute; top: calc(50% - 6px); width: 7px; height: 12px;
+    background: #000; z-index: 5; opacity: .6;
+  }
+  .card::before { left: 0; border-radius: 0 4px 4px 0; }
+  .card::after { right: 0; border-radius: 4px 0 0 4px; }
+
+  /* ---------- Ground, track & crossing signal ---------- */
+  #ground {
+    position: fixed; left: 0; right: 0; bottom: 0; height: var(--gh); z-index: 1;
+    background: linear-gradient(#151a25, #07090e);
+  }
+  #ground::before {            /* rail head */
+    content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px;
+    background: linear-gradient(#b4bdcd, #596273);
+  }
+  #ground::after {             /* sleepers */
+    content: ""; position: absolute; left: 0; right: 0; top: 3px; height: 32%;
+    background: repeating-linear-gradient(90deg, #2a2118 0 12px, transparent 12px 30px);
+  }
+  #train { position: fixed; left: 0; bottom: var(--gh); z-index: 2; will-change: transform; pointer-events: none; }
+  #train svg { display: block; overflow: visible; }
+  .puff { fill: #cfd4dc; opacity: 0; transform-box: fill-box; transform-origin: center; animation: puff 3s linear infinite; }
+  @keyframes puff { 0% { opacity: .55; transform: translate(0,0) scale(.6); } 100% { opacity: 0; transform: translate(-70px,-36px) scale(3); } }
+
+  #signal {
+    position: fixed; left: 4vw; bottom: calc(var(--gh) * 0.3); z-index: 4; pointer-events: auto; cursor: pointer;
+    height: clamp(150px, 30vh, 260px); aspect-ratio: 100 / 260;
+  }
+  #signal svg { width: 100%; height: 100%; overflow: visible; display: block; }
+  .lens { fill: #4a1010; }
+  .glow { fill: #ff2b2b; opacity: 0; filter: blur(7px); }
+  #signal.on .lensL { animation: lensA 1s steps(1, end) infinite; }
+  #signal.on .lensR { animation: lensB 1s steps(1, end) infinite; }
+  #signal.on .glowL { animation: glowA 1s steps(1, end) infinite; }
+  #signal.on .glowR { animation: glowB 1s steps(1, end) infinite; }
+  @keyframes lensA { 0% { fill: #ed1c24 } 50% { fill: #4a1010 } }
+  @keyframes lensB { 0% { fill: #4a1010 } 50% { fill: #ed1c24 } }
+  @keyframes glowA { 0% { opacity: .95 } 50% { opacity: 0 } }
+  @keyframes glowB { 0% { opacity: 0 } 50% { opacity: .95 } }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<div class="stage">
+  <div class="clock" id="clock"><span class="ampm" id="ampm"></span></div>
+  <div class="date" id="date"></div>
+</div>
+
+<div id="ground"></div>
+<div id="train" aria-hidden="true"></div>
+
+<div id="signal" aria-hidden="true">
+  <svg viewBox="0 0 100 260" xmlns="http://www.w3.org/2000/svg" font-family="Highway Gothic, Overpass, Bahnschrift, 'DIN Alternate', Arial, Helvetica, sans-serif" font-weight="700">
+    <!-- RAIL ROAD plank (behind the pole) -->
+    <g transform="translate(50 42.5) rotate(45)">
+      <rect x="-49.5" y="-9.75" width="99" height="19.5" rx="3" fill="#eef1f5" stroke="#0b0b0d" stroke-width="1"/>
+      <text x="-27" y="6.2" text-anchor="middle" font-size="17" fill="#0b0b0d" textLength="36" lengthAdjust="spacingAndGlyphs">RAIL</text>
+      <text x="27" y="6.2" text-anchor="middle" font-size="17" fill="#0b0b0d" textLength="38" lengthAdjust="spacingAndGlyphs">ROAD</text>
+    </g>
+    <!-- pole -->
+    <rect x="43.8" y="17.5" width="12.4" height="242.5" fill="#0a0a0c"/>
+    <rect x="44.6" y="17.5" width="2" height="242.5" fill="#fff" opacity=".08"/>
+    <!-- CROSSING plank (in front) -->
+    <g transform="translate(50 42.5) rotate(-45)">
+      <rect x="-49.5" y="-9.75" width="99" height="19.5" rx="3" fill="#eef1f5" stroke="#0b0b0d" stroke-width="1"/>
+      <text x="0" y="6.2" text-anchor="middle" font-size="17" fill="#0b0b0d" textLength="80" lengthAdjust="spacingAndGlyphs">CROSSING</text>
+    </g>
+    <!-- 2 TRACKS plate -->
+    <path d="M39.5 81 H60.5 V99 H80.3 V115.4 H19 V99 H39.5 Z" fill="#eef1f5" stroke="#0b0b0d" stroke-width=".9"/>
+    <text x="50" y="96" text-anchor="middle" font-size="15" fill="#0b0b0d">2</text>
+    <text x="49.7" y="110.6" text-anchor="middle" font-size="11" fill="#0b0b0d" textLength="48" lengthAdjust="spacingAndGlyphs">TRACKS</text>
+    <!-- twin lamps -->
+    <circle cx="26.9" cy="140" r="18.4" fill="#0a0a0c"/>
+    <circle cx="73.1" cy="140" r="18.4" fill="#0a0a0c"/>
+    <circle class="glow glowL" cx="26.9" cy="140" r="21"/>
+    <circle class="glow glowR" cx="73.1" cy="140" r="21"/>
+    <circle class="lens lensL" cx="26.9" cy="140" r="13.2"/>
+    <circle class="lens lensR" cx="73.1" cy="140" r="13.2"/>
+  </svg>
+</div>
+
+<script>
+(function () {
+  /* ---------- Flip clock ---------- */
+  var clock = document.getElementById('clock');
+  var dateEl = document.getElementById('date');
+  var ampm = document.getElementById('ampm');
+
+  function makeCard() {
+    var c = document.createElement('div');
+    c.className = 'card';
+    c.innerHTML =
+      '<div class="half top"><span>0</span></div>' +
+      '<div class="half bottom"><span>0</span></div>' +
+      '<div class="flap f-top"><span>0</span></div>' +
+      '<div class="flap f-bot"><span>0</span></div>';
+    c.dataset.v = '0';
+    return c;
+  }
+  function makeSep() {
+    var s = document.createElement('div');
+    s.className = 'sep';
+    s.innerHTML = '<i></i><i></i>';
+    return s;
+  }
+  var cards = [];
+  for (var g = 0; g < 3; g++) {
+    var grp = document.createElement('div');
+    grp.className = 'group';
+    for (var d = 0; d < 2; d++) { var c = makeCard(); cards.push(c); grp.appendChild(c); }
+    clock.appendChild(grp);
+    if (g < 2) clock.appendChild(makeSep());
+  }
+
+  function q(c, s) { return c.querySelector(s + ' span'); }
+  function setDigit(c, v, instant) {
+    var old = c.dataset.v;
+    if (old === v) return;
+    c.dataset.v = v;
+    if (instant) {
+      ['.top', '.bottom', '.f-top', '.f-bot'].forEach(function (s) { q(c, s).textContent = v; });
+      return;
+    }
+    q(c, '.top').textContent = v;          // new value behind
+    q(c, '.bottom').textContent = old;     // old value behind
+    q(c, '.f-top').textContent = old;      // flap falling
+    q(c, '.f-bot').textContent = v;        // flap landing
+    c.classList.remove('go'); void c.offsetWidth; c.classList.add('go');
+    clearTimeout(c._t);
+    c._t = setTimeout(function () {
+      q(c, '.bottom').textContent = v;
+      c.classList.remove('go');
+    }, 620);
+  }
+
+  function tick(instant) {
+    var n = new Date(), h = n.getHours();
+    var pm = h >= 12; h = h % 12 || 12;
+    if (ampm.textContent !== (pm ? 'PM' : 'AM')) ampm.textContent = pm ? 'PM' : 'AM';
+    var s = String(h).padStart(2, '0') + String(n.getMinutes()).padStart(2, '0') + String(n.getSeconds()).padStart(2, '0');
+    for (var i = 0; i < 6; i++) setDigit(cards[i], s[i], instant);
+    var ds = n.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    if (dateEl.textContent !== ds) dateEl.textContent = ds;
+  }
+  tick(true);
+  setInterval(tick, 250);
+  /* double-click anywhere: toggle full screen */
+  document.addEventListener('dblclick', function () {
+    var el = document.documentElement;
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) req.call(el);
+    }
+  });
+
+  /* ---------- Stars ---------- */
+  var cv = document.getElementById('stars'), cx = cv.getContext('2d'), stars = [];
+  function sizeStars() {
+    var r = window.devicePixelRatio || 1;
+    cv.width = innerWidth * r; cv.height = innerHeight * r;
+    cx.setTransform(r, 0, 0, r, 0, 0);
+    stars = [];
+    var n = Math.floor(innerWidth * innerHeight / 5000);
+    for (var i = 0; i < n; i++) stars.push({
+      x: Math.random() * innerWidth, y: Math.random() * innerHeight,
+      r: Math.random() * 1.2 + .2, p: Math.random() * 6.28, s: Math.random() * .8 + .2
+    });
+  }
+  function drawStars(t) {
+    cx.clearRect(0, 0, innerWidth, innerHeight);
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      cx.globalAlpha = .35 + .35 * Math.sin(t / 1000 * s.s + s.p);
+      cx.fillStyle = '#dfe8ff';
+      cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, 6.28); cx.fill();
+    }
+  }
+  addEventListener('resize', function () { sizeStars(); buildTrain(false); });
+  sizeStars();
+
+  /* ---------- Union Pacific freight, left → right ---------- */
+  var trainEl = document.getElementById('train'), signal = document.getElementById('signal');
+  var LIVERIES = [
+    { body: '#f2b51d', nose: '#f2b51d', lower: '#858b94', stripe: '#c8102e', ink: '#c8102e', text: 'UNION PACIFIC', x: 8,  tl: 70, fs: 9 },
+    { body: '#1d3f78', nose: '#f0c21a', lower: '#7d838c', stripe: '#f0c21a', ink: '#f0c21a', text: 'CSX',           x: 20, tl: 36, fs: 14 },
+    { body: '#c1121f', nose: '#c1121f', lower: '#8a8f97', stripe: '#f2f2f2', ink: '#ffffff', text: 'CANADIAN PACIFIC', x: 6, tl: 72, fs: 8 },
+    { body: '#17191d', nose: '#17191d', lower: '#4a4f58', stripe: '#e8e8e8', ink: '#ffffff', text: '', logo: 'ns', x: 6, tl: 72, fs: 8 },
+    { body: '#e8650d', nose: '#e8650d', lower: '#1a1c20', stripe: '#1a1c20', ink: '#15171a', text: 'BNSF',          x: 16, tl: 44, fs: 14 }
+  ];
+  var PRE = 4, GAP = 8;            // seconds: signal warning before the head arrives, pause between trains
+  var trainW = 0, speedK = 1;
+  var tSec = 0, lastNow = null, warp = 1;     // cycle clock (seconds) and fast-forward factor
+
+  function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  function wheels(xs, r, y) {
+    return xs.map(function (x) {
+      return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="#0c0e12"/><circle cx="' + x + '" cy="' + y + '" r="' + (r * .35) + '" fill="#3a404b"/>';
+    }).join('');
+  }
+  function base() {
+    return '<rect x="0" y="56" width="100" height="5" fill="#15171b"/>' +
+           '<rect x="8" y="60" width="24" height="4" fill="#0f1114"/><rect x="68" y="60" width="24" height="4" fill="#0f1114"/>' +
+           wheels([14, 26, 74, 86], 5, 65);
+  }
+  function rib(x, y, w, h) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#rib)"/>'; }
+
+  function boxcar() {
+    var c = pick(['#7a3b2e', '#5b3a2a', '#8a2f2f', '#3d4b3f', '#4a4f5c']);
+    return base() + '<rect x="1" y="14" width="98" height="42" fill="' + c + '"/>' + rib(1, 14, 98, 42) +
+      '<rect x="0" y="12" width="100" height="3" fill="#000" opacity=".3"/>' +
+      '<rect x="36" y="17" width="26" height="36" fill="#000" opacity=".2"/><rect x="49" y="17" width="1" height="36" fill="#000" opacity=".4"/>' +
+      '<rect x="8" y="24" width="18" height="2" fill="#fff" opacity=".35"/><rect x="8" y="29" width="12" height="2" fill="#fff" opacity=".25"/>';
+  }
+  function tank() {
+    var c = pick(['#2c3036', '#9aa2ad', '#3b3f46', '#b8bcc4']);
+    return base() + '<rect x="14" y="50" width="72" height="6" fill="#1a1c21"/>' +
+      '<rect x="4" y="20" width="92" height="32" rx="16" fill="' + c + '"/>' +
+      '<rect x="10" y="24" width="80" height="4" rx="2" fill="#fff" opacity=".13"/>' +
+      '<rect x="44" y="16" width="12" height="5" rx="1" fill="#000" opacity=".4"/><rect x="12" y="19" width="76" height="1.5" fill="#000" opacity=".4"/>' +
+      '<rect x="30" y="20" width="1.5" height="32" fill="#000" opacity=".3"/><rect x="70" y="20" width="1.5" height="32" fill="#000" opacity=".3"/>';
+  }
+  function hopper() {
+    var c = pick(['#8a8f96', '#6b4e3d', '#54595f', '#9b9fa6']);
+    return base() + '<path d="M1 16 H99 V42 L90 56 H10 L1 42 Z" fill="' + c + '"/>' + rib(1, 16, 98, 40) +
+      '<rect x="14" y="12" width="12" height="4" fill="#000" opacity=".4"/><rect x="44" y="12" width="12" height="4" fill="#000" opacity=".4"/><rect x="74" y="12" width="12" height="4" fill="#000" opacity=".4"/>' +
+      '<rect x="8" y="24" width="16" height="2" fill="#fff" opacity=".3"/>';
+  }
+  function boxes() {
+    var cs = ['#1f5fa8', '#d4531a', '#2b8a5b', '#c9a227', '#8a2f2f', '#4a4f5c'];
+    return '<rect x="0" y="52" width="100" height="5" fill="#1a1c21"/>' +
+      '<rect x="8" y="60" width="24" height="4" fill="#0f1114"/><rect x="68" y="60" width="24" height="4" fill="#0f1114"/>' + wheels([14, 26, 74, 86], 5, 65) +
+      '<rect x="2" y="22" width="46" height="30" fill="' + pick(cs) + '"/>' + rib(2, 22, 46, 30) +
+      '<rect x="52" y="22" width="46" height="30" fill="' + pick(cs) + '"/>' + rib(52, 22, 46, 30) +
+      '<rect x="6" y="27" width="14" height="2" fill="#fff" opacity=".45"/><rect x="56" y="27" width="14" height="2" fill="#fff" opacity=".45"/>';
+  }
+  function gondola() {
+    return base() + '<rect x="1" y="24" width="98" height="32" fill="#4a4f57"/>' + rib(1, 24, 98, 32) +
+      '<path d="M3 24 Q22 12 48 17 T97 19 V25 H3 Z" fill="#101114"/>';
+  }
+  var NS_MARK = 'M5.0 37.0 L17.0 37.0 L21.3 35.3 L20.3 35.0 L5.7 35.0Z M6.0 34.1 L20.3 34.1 L22.9 32.9 L24.7 32.3 L24.0 32.1 L6.7 32.1Z M7.0 31.2 L22.4 31.2 L25.0 30.0 L27.8 29.2 L7.7 29.2Z M8.0 28.2 L24.3 28.2 L27.1 27.5 L28.6 27.3 L30.1 27.2 L27.3 26.5 L28.2 26.3 L8.8 26.3Z M37.0 37.1 L48.3 37.1 L50.8 30.5 L54.1 37.0 L60.2 37.0 L61.0 34.9 L61.6 35.8 L62.5 36.6 L63.5 37.1 L64.7 37.3 L68.8 37.6 L71.5 37.6 L75.3 37.3 L76.3 37.0 L77.3 36.4 L78.1 35.8 L78.7 34.9 L79.3 33.7 L79.6 32.5 L79.5 31.6 L79.3 31.0 L78.9 30.5 L78.3 30.0 L77.0 29.2 L75.2 28.9 L70.3 28.3 L70.0 28.1 L69.7 27.8 L69.8 27.3 L70.1 27.0 L70.6 26.8 L73.0 26.8 L73.6 27.0 L73.9 27.2 L73.9 27.7 L73.7 28.1 L73.8 28.2 L80.4 28.4 L80.9 27.4 L81.0 26.3 L80.5 25.3 L79.5 24.6 L78.3 24.1 L75.6 23.6 L73.4 23.4 L71.0 23.4 L68.2 23.6 L66.2 24.1 L65.1 24.6 L64.5 25.1 L64.4 24.9 L65.0 23.4 L59.1 23.4 L56.7 30.1 L53.3 23.3 L42.1 23.3 L41.8 23.7Z M61.8 32.5 L62.7 29.8 L63.1 30.4 L63.6 31.0 L65.0 31.7 L67.0 32.2 L72.2 32.6 L72.6 32.9 L72.7 33.3 L72.4 33.8 L71.8 34.1 L69.5 34.2 L68.8 34.1 L68.2 33.8 L67.9 33.4 L68.0 32.8Z M9.1 25.3 L31.1 25.3 L31.2 25.1 L30.6 24.9 L30.3 24.6 L31.4 24.5 L31.8 23.3 L9.8 23.3Z';
+  var CAL_PATHS = {red: 'M50.8 17.8 L48.1 18.4 L46.5 19.1 L44.5 20.4 L42.4 22.5 L40.9 25.0 L40.2 27.3 L41.0 27.3 L41.1 27.1 L41.5 25.4 L41.7 25.2 L43.6 25.2 L43.7 25.7 L43.4 27.3 L44.4 27.3 L44.5 27.4 L44.5 28.0 L44.3 28.9 L44.2 29.0 L43.0 29.0 L42.6 31.7 L43.5 31.7 L43.6 31.6 L43.7 31.7 L43.5 33.3 L43.2 33.6 L41.1 33.7 L40.3 33.1 L40.8 34.6 L42.1 36.9 L42.8 37.9 L44.2 39.3 L45.1 40.0 L47.2 41.1 L48.5 41.6 L50.8 42.1 L53.4 42.1 L55.6 41.6 L58.0 40.6 L59.9 39.3 L61.2 38.0 L62.5 36.2 L63.6 33.6 L61.7 33.6 L61.5 33.4 L61.5 32.9 L62.2 29.8 L62.2 29.1 L62.1 29.0 L61.5 29.0 L61.2 29.5 L60.5 33.3 L60.3 33.6 L58.0 33.6 L57.9 33.0 L59.1 27.4 L59.2 27.3 L61.3 27.3 L61.4 27.8 L62.2 27.3 L62.6 27.1 L63.8 27.1 L63.9 27.3 L63.3 25.3 L62.2 23.3 L61.1 21.8 L59.1 20.0 L57.6 19.1 L55.6 18.3 L53.3 17.8Z', white: 'M58.6 27.5 L56.3 27.5 L55.1 33.6 L57.5 33.6 L57.5 33.1 L57.6 33.0 L57.6 32.5 L57.7 32.4 L57.7 31.9 L57.9 31.2 L57.9 30.6 L58.0 30.5 L58.0 30.1 L58.2 29.9 L58.2 29.5 L58.3 29.4 L58.3 28.9 L58.4 28.8 L58.4 28.3Z M54.7 27.7 L53.6 27.4 L52.0 27.4 L51.9 27.5 L51.4 27.5 L50.5 28.0 L49.8 28.7 L49.5 29.5 L51.3 29.5 L51.3 29.4 L52.0 28.8 L52.8 28.8 L53.0 29.1 L53.0 29.5 L52.8 29.7 L51.8 29.7 L51.6 29.8 L50.6 29.9 L49.2 30.6 L48.7 31.2 L48.5 31.8 L48.5 32.6 L48.7 33.1 L49.0 33.3 L49.8 33.7 L50.8 33.7 L51.8 33.3 L52.3 32.9 L52.5 33.0 L52.5 33.6 L54.5 33.6 L54.5 32.7 L54.7 32.6 L54.7 32.2 L54.8 32.0 L54.8 31.6 L54.9 31.5 L54.9 31.0 L55.0 30.9 L55.0 30.4 L55.2 29.7 L55.2 28.4Z M52.6 30.8 L52.7 30.9 L52.7 31.2 L52.5 31.8 L51.9 32.3 L51.2 32.3 L50.9 31.9 L51.0 31.5 L51.8 30.9Z M49.2 27.4 L48.4 27.4 L47.9 27.6 L47.2 28.4 L47.1 28.3 L47.2 27.5 L45.3 27.5 L45.1 28.3 L45.1 28.8 L45.0 28.9 L45.0 29.4 L44.9 29.5 L44.9 30.1 L44.8 30.2 L44.4 32.4 L44.3 32.5 L44.3 33.0 L44.2 33.1 L44.2 33.6 L46.4 33.6 L46.5 33.4 L46.5 33.0 L46.6 32.9 L47.1 30.2 L47.5 29.6 L47.9 29.5 L48.8 29.5Z M56.6 25.4 L56.6 26.0 L56.4 26.8 L58.8 26.8 L58.9 26.0 L59.0 25.9 L59.0 25.3 L56.8 25.3Z', black: 'M35.8 28.1 L35.0 27.5 L34.0 27.4 L33.9 27.3 L32.3 27.4 L31.0 28.0 L30.4 28.7 L30.2 29.4 L31.8 29.4 L32.3 28.8 L33.1 28.5 L33.7 28.9 L33.7 29.5 L33.5 29.6 L32.7 29.6 L32.6 29.7 L31.9 29.7 L31.8 29.8 L31.0 29.9 L29.9 30.5 L29.5 31.0 L29.2 31.5 L29.2 31.8 L29.1 31.9 L29.2 32.7 L29.8 33.3 L30.6 33.6 L31.2 33.6 L31.3 33.4 L32.1 33.3 L33.0 32.6 L33.1 32.7 L33.1 33.4 L35.2 33.4 L35.2 32.5 L35.3 32.4 L35.5 30.6 L35.6 30.5 L35.6 30.1 L35.9 29.4 L35.9 28.3Z M33.3 30.5 L33.4 30.6 L33.3 31.3 L32.9 32.0 L32.0 32.3 L31.6 31.9 L31.6 31.5 L32.0 30.9 L32.5 30.6Z M39.6 25.4 L37.4 25.4 L37.2 26.8 L37.0 26.9 L36.9 28.1 L36.8 28.2 L36.8 28.7 L36.7 28.8 L36.7 29.2 L36.6 29.4 L36.6 29.8 L36.5 29.9 L36.5 30.5 L36.4 30.6 L36.4 31.1 L36.2 31.2 L36.2 31.7 L36.1 31.8 L36.1 32.3 L35.9 33.0 L35.9 33.4 L38.0 33.4 L38.1 33.3 L38.1 32.9 L38.2 32.7 L38.2 32.3 L38.3 32.2 L38.3 31.7 L38.5 31.6 L38.5 31.1 L38.6 31.0 L38.6 30.5 L38.7 30.4 L38.9 28.7 L39.0 28.5 L39.0 28.1 L39.1 28.0 L39.1 27.5 L39.3 27.4Z M28.4 25.6 L27.6 25.3 L26.7 25.3 L26.6 25.2 L26.4 25.3 L25.1 25.4 L23.8 26.2 L23.1 27.0 L22.2 28.8 L22.1 29.7 L22.0 29.8 L22.0 31.2 L22.5 32.4 L23.2 33.1 L24.6 33.6 L26.0 33.4 L27.1 33.0 L27.6 32.6 L28.4 31.7 L29.0 30.4 L26.9 30.4 L26.6 31.1 L26.1 31.6 L25.6 31.8 L24.9 31.7 L24.4 31.1 L24.4 29.7 L24.6 29.6 L24.7 28.7 L25.1 27.6 L25.7 27.0 L26.0 26.9 L26.6 26.9 L27.0 27.3 L27.1 27.5 L27.1 28.5 L29.4 28.5 L29.4 27.1 L29.2 27.0 L29.2 26.7 L29.0 26.2Z'};
+  var AMT_PATHS = {red: 'M20.0 23.3 L29.3 32.6 L20.0 42.0 L26.2 42.0 L35.5 32.6 L26.2 23.3Z', blue: 'M27.6 42.0 L33.9 42.0 L38.4 37.4 L65.9 37.4 L65.9 33.1 L36.5 33.1Z M27.6 23.3 L36.5 32.2 L65.9 32.2 L65.9 27.8 L38.4 27.8 L33.9 23.3Z', black: 'M54.3 21.9 L53.9 22.5 L54.8 22.5 L55.1 22.1 L55.5 22.0 L55.8 22.1 L56.2 22.4 L56.2 22.7 L55.7 23.1 L55.1 23.1 L54.2 23.4 L53.8 23.9 L54.1 24.7 L54.7 25.1 L55.3 25.1 L56.1 24.6 L56.3 25.0 L57.0 25.0 L57.0 22.5 L56.8 21.9 L56.2 21.6 L55.0 21.6Z M56.2 23.4 L56.2 24.0 L55.8 24.4 L55.0 24.5 L54.7 24.2 L54.7 23.8 L54.9 23.6 L56.1 23.3Z M53.5 21.6 L52.8 21.7 L52.3 22.2 L52.1 21.7 L51.4 21.7 L51.4 25.0 L52.3 25.0 L52.3 23.0 L52.7 22.4 L53.5 22.3Z M43.1 21.7 L43.1 25.0 L43.9 25.0 L43.9 22.6 L44.3 22.2 L44.9 22.2 L45.2 22.5 L45.3 22.8 L45.3 25.0 L46.0 25.0 L46.0 22.7 L46.4 22.2 L47.1 22.2 L47.4 22.6 L47.4 25.0 L48.2 25.0 L48.2 22.7 L48.1 22.2 L47.7 21.7 L46.6 21.6 L46.0 22.1 L45.4 21.6 L44.3 21.7 L43.9 22.1 L43.8 21.7Z M49.3 20.6 L49.3 21.6 L48.8 21.7 L48.8 22.1 L49.3 22.2 L49.3 24.3 L49.4 24.6 L49.8 25.0 L50.8 25.0 L50.8 24.4 L50.5 24.4 L50.1 24.1 L50.1 22.2 L50.2 22.1 L50.8 22.1 L50.8 21.7 L50.2 21.7 L50.1 21.6 L50.1 20.6Z M58.0 20.3 L58.0 25.0 L58.7 25.0 L58.7 23.9 L59.1 23.5 L59.3 23.6 L60.2 25.0 L61.1 25.0 L59.8 23.0 L60.9 21.7 L60.0 21.7 L58.8 22.8 L58.7 22.7 L58.7 20.3Z M39.9 20.3 L38.1 25.0 L39.0 25.0 L39.1 24.4 L39.5 23.9 L41.1 23.9 L41.4 24.1 L41.6 25.0 L42.5 25.0 L40.8 20.3Z M40.3 21.4 L40.7 22.2 L41.0 23.2 L40.9 23.3 L39.8 23.3 L39.7 23.2Z'};
+  function MARK(kind, ink) {       // logos traced from the supplied images
+    if (kind === 'cal') return '<path fill="#e31837" d="' + CAL_PATHS.red + '"/><path fill="#ffffff" fill-rule="evenodd" d="' + CAL_PATHS.white + '"/><path fill="#111114" fill-rule="evenodd" d="' + CAL_PATHS.black + '"/>';
+    if (kind === 'amt') return '<path fill="#e22323" d="' + AMT_PATHS.red + '"/><path fill="#0060aa" d="' + AMT_PATHS.blue + '"/><path fill="#111114" fill-rule="evenodd" d="' + AMT_PATHS.black + '"/>';
+    return '<path fill="' + ink + '" fill-rule="evenodd" d="' + NS_MARK + '"/>';
+  }
+  function loco(lead, lv) {
+    return '<rect x="2" y="54" width="118" height="6" fill="#1a1c21"/>' +
+      '<rect x="2" y="44" width="120" height="12" fill="' + lv.lower + '"/>' +
+      '<path d="M2 18 H84 V44 H2 Z" fill="' + lv.body + '"/>' +
+      '<path d="M84 8 H108 V44 H84 Z" fill="' + lv.body + '"/>' +
+      '<path d="M108 24 H121 L123 44 H108 Z" fill="' + lv.nose + '"/>' +
+      '<rect x="82" y="5" width="28" height="4" fill="#6c727c"/><rect x="2" y="16" width="82" height="3" fill="#6c727c"/>' +
+      '<rect x="10" y="11" width="22" height="5" fill="#5a606a"/><rect x="40" y="12" width="14" height="4" fill="#5a606a"/>' +
+      '<rect x="90" y="13" width="14" height="13" rx="2" fill="#1c2635"/><rect x="91" y="14" width="5" height="11" fill="#fff" opacity=".1"/>' +
+      '<rect x="2" y="43" width="120" height="3" fill="' + lv.stripe + '"/>' +
+      (lv.stripe2 ? '<rect x="2" y="39.5" width="120" height="2.5" fill="' + lv.stripe2 + '"/>' : '') +
+      (lv.logo ? MARK(lv.logo, lv.ink) :
+        '<text x="' + lv.x + '" y="35" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="' + lv.fs + '" fill="' + lv.ink + '" textLength="' + lv.tl + '" lengthAdjust="spacingAndGlyphs">' + lv.text + '</text>') +
+      '<rect x="10" y="57" width="36" height="7" fill="#101216"/><rect x="78" y="57" width="36" height="7" fill="#101216"/>' +
+      wheels([16, 28, 40, 84, 96, 108], 6, 64) +
+      (lead ? '<polygon points="122,30 340,6 340,56" fill="url(#beam)"/><circle cx="122" cy="30" r="9" fill="#fff6c8" opacity=".35"/>' : '') +
+      '<circle cx="121" cy="30" r="3" fill="#fff8dc"/>';
+  }
+
+  /* passenger cars, modelled on the real equipment (no lettering) */
+  function pbase() {
+    return '<rect x="0" y="56" width="128" height="5" fill="#15171b"/>' +
+      '<rect x="14" y="60" width="28" height="4" fill="#0f1114"/><rect x="86" y="60" width="28" height="4" fill="#0f1114"/>' +
+      wheels([18, 30, 98, 110], 5, 65);
+  }
+  function lit(x, y, w, h) {       // lit window with the odd dim one
+    return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="1" fill="' + (Math.random() < .1 ? '#7c6f4a' : '#ffd77e') + '"/>';
+  }
+  function row(x0, step, n, y, w, h) { var o = '', i; for (i = 0; i < n; i++) o += lit(x0 + i * step, y, w, h); return o; }
+
+  /* Amtrak Superliner: stainless-steel bi-level, red / white / blue band under the upper windows */
+  function carAmtrak() {
+    return pbase() +
+      '<rect x="1" y="4" width="126" height="53" rx="5" fill="#cfd5db"/>' +
+      '<rect x="1" y="4" width="126" height="48" fill="url(#flute)"/>' +
+      '<rect x="1" y="52" width="126" height="5" fill="#a3abb4"/>' +
+      row(7, 7.2, 16, 9.5, 5.2, 5.4) +
+      '<rect x="1" y="19" width="126" height="3.2" fill="#df5a2b"/><rect x="1" y="22.2" width="126" height="2" fill="#f4f4f4"/><rect x="1" y="24.2" width="126" height="3.8" fill="#3b6db3"/>' +
+      row(8, 12, 3, 34, 9, 9) +
+      '<rect x="52" y="31" width="11" height="22" rx="1" fill="#8f979f"/>' + lit(54.5, 34, 6, 9) +
+      '<rect x="74" y="36" width="16" height="14" fill="#98a0a9"/>' +
+      '<rect x="75" y="38" width="14" height="1" fill="#000" opacity=".3"/><rect x="75" y="41" width="14" height="1" fill="#000" opacity=".3"/><rect x="75" y="44" width="14" height="1" fill="#000" opacity=".3"/><rect x="75" y="47" width="14" height="1" fill="#000" opacity=".3"/>' +
+      row(98, 11.5, 2, 34, 9, 9);
+  }
+
+  /* Caltrain bi-level gallery car: red roof band with a raised centre, white body, red sweep stripe */
+  function carCal() {
+    var door = function (x) { return '<rect x="' + x + '" y="30" width="8" height="22" rx="1" fill="#c9ced5"/>' + lit(x + 2, 32, 4, 8); };
+    return pbase() +
+      '<path d="M1 22 L4 17 L18 17 L34 6 L94 6 L110 17 L124 17 L127 22 V57 H1 Z" fill="#e6e9ee"/>' +
+      '<path d="M1 27 V22 L4 17 L18 17 L34 6 L94 6 L110 17 L124 17 L127 22 V27 Z" fill="#d3202d"/>' +
+      '<rect x="36" y="7.5" width="56" height="1.5" fill="#fff" opacity=".18"/>' +
+      row(38, 7.2, 8, 9.5, 5.4, 4.6) +
+      row(7, 10, 2, 30, 8, 5) + row(108, 10, 2, 30, 8, 5) +
+      door(26) + door(94) +
+      row(40, 10, 5, 34, 8, 6) +
+      '<polyline points="1,45 22,45 34,52 94,52 106,45 127,45" fill="none" stroke="#d3202d" stroke-width="1.7"/>';
+  }
+
+  /* Union Pacific heritage car: yellow, grey roof and skirt, thin red stripe; some are dome cars */
+  function carUP(dome) {
+    var o = pbase() +
+      '<rect x="1" y="14" width="126" height="43" rx="4" fill="#f2b51d"/>' +
+      '<path d="M1 22 Q1 12 9 12 H119 Q127 12 127 22 Z" fill="#8a8f96"/>' +
+      '<rect x="1" y="45.6" width="126" height="11.4" fill="#858b94"/><rect x="1" y="43.8" width="126" height="1.8" fill="#c8102e"/>';
+    if (dome) {
+      o += '<rect x="30" y="5" width="62" height="9" rx="4.5" fill="#8a8f96"/>';
+      for (var i = 0; i < 10; i++) o += '<rect x="' + (34 + i * 5.6) + '" y="7.4" width="4" height="4.2" rx="1" fill="#d9ecf7" opacity=".85"/>';
+      o += row(8, 22, 3, 25, 13, 9) + '<rect x="76" y="24" width="8" height="20" rx="1" fill="#a2a8b0"/>' + lit(78, 27, 4, 8) + row(90, 16, 3, 25, 12, 9);
+    } else {
+      o += row(8, 18, 3, 25, 13, 9) + '<rect x="64" y="24" width="8" height="20" rx="1" fill="#a2a8b0"/>' + lit(66, 27, 4, 8) + row(80, 16, 3, 25, 12, 9);
+    }
+    return o;
+  }
+  var AMTRAK_LV = { body: '#d7dce3', nose: '#d7dce3', lower: '#aeb5bf', stripe: '#1f3b8a', ink: '#1f3b8a', text: '', logo: 'amt' };
+  var CAL_LV = { body: '#cdd3db', nose: '#cdd3db', lower: '#c8102e', stripe: '#14161a', ink: '#14161a', text: '', logo: 'cal' };
+
+  /* Union Pacific "Big Boy" 4-8-8-4 steam locomotive with tender (350 units long) */
+  function bigboy() {
+    var blk = '#1c1e22', dk = '#101113', rod = '#9aa2af', out = '', i;
+    // tender
+    out += '<rect x="0" y="24" width="118" height="34" rx="2" fill="#17181b"/><rect x="2" y="17" width="72" height="9" rx="2" fill="' + dk + '"/>' +
+      '<rect x="84" y="20" width="20" height="5" rx="2" fill="' + dk + '"/><rect x="0" y="24" width="118" height="3" fill="#fff" opacity=".07"/>' +
+      '<text x="12" y="46" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="9" fill="#f0c24b" textLength="94" lengthAdjust="spacingAndGlyphs">UNION PACIFIC</text>' +
+      '<rect x="4" y="57" width="110" height="3" fill="' + dk + '"/>' + wheels([12, 24, 36, 48, 70, 82, 94, 106], 5, 65);
+    out += '<rect x="116" y="50" width="12" height="3" fill="' + dk + '"/>';
+    // frame, trucks
+    out += '<rect x="124" y="52" width="206" height="5" fill="' + dk + '"/><rect x="128" y="60" width="22" height="3" fill="' + dk + '"/><rect x="324" y="60" width="26" height="3" fill="' + dk + '"/>';
+    // boiler, smokebox, cab
+    out += '<rect x="156" y="20" width="180" height="30" rx="12" fill="' + blk + '"/><rect x="164" y="24" width="160" height="3" rx="1.5" fill="#fff" opacity=".13"/>' +
+      '<rect x="164" y="18" width="148" height="2" fill="#2a2d33"/>' +
+      '<rect x="312" y="19" width="26" height="32" rx="7" fill="#34373d"/><rect x="314" y="23" width="4" height="22" rx="2" fill="#fff" opacity=".1"/>' +
+      '<rect x="124" y="12" width="36" height="40" fill="' + blk + '"/><rect x="121" y="8" width="42" height="5" fill="' + dk + '"/>' +
+      '<rect x="134" y="20" width="16" height="11" rx="2" fill="#2b3a4d"/><rect x="135" y="21" width="14" height="9" rx="1.5" fill="#ffb14a" opacity=".75"/>' +
+      '<text x="142" y="45" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="7.5" fill="#f0c24b">4014</text>';
+    // domes, stack
+    out += '<rect x="190" y="11" width="16" height="9" rx="3" fill="' + blk + '"/><rect x="232" y="9" width="22" height="11" rx="4" fill="' + blk + '"/>' +
+      '<rect x="272" y="14" width="6" height="6" fill="' + dk + '"/>' +
+      '<path d="M314 4 H332 L329 9 H317 Z" fill="' + dk + '"/><rect x="317" y="9" width="12" height="12" fill="' + dk + '"/>';
+    // cylinders, wheels, rods
+    out += '<rect x="176" y="47" width="32" height="9" rx="3" fill="#2d3036"/><rect x="296" y="47" width="32" height="9" rx="3" fill="#2d3036"/>' +
+      '<rect x="160" y="62" width="68" height="2.6" rx="1" fill="' + rod + '"/><rect x="247" y="62" width="68" height="2.6" rx="1" fill="' + rod + '"/>';
+    [162, 183, 204, 225, 252, 273, 294, 315].forEach(function (cx) {
+      out += '<circle cx="' + cx + '" cy="59.5" r="10.5" fill="#101113"/><circle cx="' + cx + '" cy="59.5" r="8.2" fill="none" stroke="#d9dde3" stroke-opacity=".3" stroke-width="1"/><circle cx="' + cx + '" cy="59.5" r="3" fill="#8a919d"/>';
+    });
+    out += wheels([132, 144, 332, 344], 5, 65);
+    // pilot + headlight beam
+    out += '<polygon points="334,56 350,70 334,70" fill="#2a2d33"/>' +
+      '<polygon points="338,26 560,4 560,52" fill="url(#beam)"/><circle cx="338" cy="26" r="10" fill="#fff6c8" opacity=".35"/><circle cx="337" cy="26" r="3.5" fill="#fff8dc"/>';
+    // smoke
+    [0, -.75, -1.5, -2.25].forEach(function (d) { out += '<circle class="puff" cx="323" cy="2" r="5" style="animation-delay:' + d + 's"/>'; });
+    return out;
+  }
+
+  var ORDER = [['freight', 0], ['freight', 1], ['freight', 2], ['freight', 3], ['freight', 4], ['amtrak'], ['caltrain'], ['bigboy']];
+  var bag = [], lastSpec = null, curSpec = ORDER[0];
+  function nextSpec() {
+    if (!bag.length) {
+      var b = ORDER.slice(), i, j, t;
+      do {
+        for (i = b.length - 1; i > 0; i--) { j = Math.floor(Math.random() * (i + 1)); t = b[i]; b[i] = b[j]; b[j] = t; }
+      } while (lastSpec && b[b.length - 1] === lastSpec);
+      bag = b;
+    }
+    lastSpec = bag.pop();
+    return lastSpec;
+  }
+  function buildTrain(next) {
+    if (next) curSpec = nextSpec();
+    var o = curSpec;
+    var th = Math.max(52, Math.min(84, innerWidth * 0.062));
+    var parts = '', x = 0, i, n, f;
+    function add(markup, w, gap) { parts += '<g transform="translate(' + x + ' 0)">' + markup + '</g>'; x += w + gap; }
+    if (o[0] === 'freight') {
+      var lv = LIVERIES[o[1]], kinds = [boxcar, boxcar, tank, hopper, boxes, gondola];
+      n = 11 + Math.floor(Math.random() * 6);
+      for (i = 0; i < n; i++) add(pick(kinds)(), 100, 4);
+      add(loco(false, lv), 124, 4); add(loco(true, lv), 120, 4);
+      speedK = 1;
+    } else if (o[0] === 'amtrak') {
+      n = 6 + Math.floor(Math.random() * 3);
+      for (i = 0; i < n; i++) add(carAmtrak(), 128, 4);
+      add(loco(true, AMTRAK_LV), 120, 4);
+      speedK = 1.35;
+    } else if (o[0] === 'caltrain') {
+      n = 5 + Math.floor(Math.random() * 3);
+      for (i = 0; i < n; i++) add(carCal(), 128, 4);
+      add(loco(true, CAL_LV), 120, 4);
+      speedK = 1.25;
+    } else {
+      n = 8 + Math.floor(Math.random() * 3);
+      for (i = 0; i < n; i++) add(carUP(Math.random() < .2), 128, 4);
+      add(bigboy(), 350, 4);
+      speedK = 0.85;
+    }
+    x -= 4;
+    parts += '<circle cx="1" cy="40" r="2.4" fill="#ff2a2a"/><circle cx="1" cy="40" r="7" fill="#ff2a2a" opacity=".3"/>';   // rear marker
+    trainEl.innerHTML =
+      '<svg viewBox="0 0 ' + x + ' 70" xmlns="http://www.w3.org/2000/svg" style="height:' + th + 'px;width:' + (x * th / 70) + 'px">' +
+      '<defs><pattern id="rib" width="5" height="4" patternUnits="userSpaceOnUse"><rect width="1.3" height="4" fill="#000" opacity=".22"/></pattern>' +
+      '<pattern id="flute" width="3.2" height="4" patternUnits="userSpaceOnUse"><rect width="0.7" height="4" fill="#000" opacity=".12"/></pattern>' +
+      '<linearGradient id="beam" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#fff6c8" stop-opacity=".5"/><stop offset="1" stop-color="#fff6c8" stop-opacity="0"/></linearGradient></defs>' +
+      parts + '</svg>';
+    trainW = x * th / 70;
+  }
+  buildTrain(true);
+
+  function frame(now) {
+    if (lastNow === null) lastNow = now;
+    var dt = Math.min(0.1, (now - lastNow) / 1000); lastNow = now;
+    tSec += dt * warp;
+    var W = innerWidth, speed = W * 0.075 * speedK;                       // px per second
+    var t = tSec;
+    var travel = PRE + (W + trainW) / speed;                     // head enters PRE seconds after the signal starts
+    if (t > travel + GAP) { tSec = 0; t = 0; warp = 1; buildTrain(true); }   // next train arrives at normal speed
+    var head = speed * (t - PRE);                                // right edge of the lead locomotive
+    trainEl.style.transform = 'translateX(' + (head - trainW).toFixed(1) + 'px)';
+    var r = signal.getBoundingClientRect(), sx = r.left + r.width / 2;
+    var tOff = PRE + (sx + speed * 2.5 + trainW) / speed;         // lights stop shortly after the last car clears
+    signal.classList.toggle('on', t < tOff);
+    drawStars(now);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  /* double-click the crossing sign: fast-forward to the next train */
+  signal.addEventListener('dblclick', function (e) {
+    e.stopPropagation();           // don't trigger the full-screen toggle
+    warp = 18;
+  });
+})();
+</script>
+</body>
+</html>
