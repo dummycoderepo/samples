@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@500;600&display=swap" rel="stylesheet">
+<title>Flip Clock with Night Flight</title>
+<style>
+  :root {
+    --sky-top: #050a1c;
+    --sky-bottom: #14264d;
+    --card: #1b1d22;
+    --card-edge: #0c0d10;
+    --digit: #f2ead8;
+    --h: clamp(72px, 17vw, 210px);
+    --w: calc(var(--h) * 0.72);
+    --plane: #cfd6e4;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    overflow: hidden;
+    background: linear-gradient(to bottom, var(--sky-top), var(--sky-bottom));
+    font-family: Bahnschrift, "DIN Condensed", "Arial Narrow", Impact, sans-serif;
+    user-select: none;
+  }
+  #stars { position: fixed; inset: 0; width: 100%; height: 100%; }
+
+  /* ---------- Clock ---------- */
+  .stage {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding-top: 6vh;
+  }
+  .clock {
+    display: flex; align-items: center; justify-content: center;
+    gap: calc(var(--h) * 0.14);
+    position: relative;
+  }
+  .ampm {
+    position: absolute; right: 0; top: calc(100% + var(--h) * 0.1);
+    font-family: "Highway Gothic", "FHWA Series C", "Overpass", Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif;
+    font-weight: 600; letter-spacing: .06em; font-size: calc(var(--h) * 0.16);
+    color: var(--digit); opacity: .7;
+  }
+  .date {
+    margin-top: calc(var(--h) * 0.28);
+    font-family: "Highway Gothic", "FHWA Series C", "Overpass", "Roadgeek 2005 Series C", Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif;
+    font-weight: 600; letter-spacing: .04em;
+    font-size: calc(var(--h) * 0.24);
+    color: var(--digit); opacity: .9; text-align: center;
+  }
+  .group { display: flex; gap: calc(var(--h) * 0.06); }
+  .sep { display: flex; flex-direction: column; gap: calc(var(--h) * 0.16); }
+  .sep i {
+    width: calc(var(--h) * 0.07); height: calc(var(--h) * 0.07);
+    border-radius: 50%; background: var(--digit); opacity: .85;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: .85 } 50% { opacity: .25 } }
+
+  .card {
+    position: relative; width: var(--w); height: var(--h);
+    perspective: calc(var(--h) * 3);
+    font-weight: 700; font-size: calc(var(--h) * 0.92);
+    color: var(--digit);
+    filter: drop-shadow(0 12px 18px rgba(0,0,0,.45));
+  }
+  .half, .flap {
+    position: absolute; left: 0; width: 100%; height: 50%;
+    overflow: hidden; background: var(--card);
+  }
+  .top, .flap.f-top { top: 0; border-radius: 10px 10px 0 0; border-bottom: 1px solid var(--card-edge); }
+  .bottom, .flap.f-bot { bottom: 0; border-radius: 0 0 10px 10px; background: #202328; }
+  .half span, .flap span {
+    position: absolute; left: 0; width: 100%; height: 200%;
+    line-height: var(--h); text-align: center;
+  }
+  .top span, .f-top span { top: 0; }
+  .bottom span, .f-bot span { top: -100%; }
+
+  .flap { display: none; backface-visibility: hidden; }
+  .f-top { transform-origin: bottom; z-index: 3; }
+  .f-bot { transform-origin: top; z-index: 3; transform: rotateX(90deg); }
+  .card.go .f-top { display: block; animation: flipTop .3s ease-in forwards; }
+  .card.go .f-bot { display: block; animation: flipBot .3s .3s ease-out forwards; }
+  @keyframes flipTop { to { transform: rotateX(-90deg); } }
+  @keyframes flipBot { to { transform: rotateX(0deg); } }
+
+  /* axle pin */
+  .card::before, .card::after {
+    content: ""; position: absolute; top: calc(50% - 6px); width: 7px; height: 12px;
+    background: #000; z-index: 5; opacity: .6;
+  }
+  .card::before { left: 0; border-radius: 0 4px 4px 0; }
+  .card::after { right: 0; border-radius: 4px 0 0 4px; }
+
+  /* ---------- Plane ---------- */
+  #plane {
+    position: fixed; left: 0; top: 0; z-index: 10;
+    width: clamp(56px, 7vw, 100px); aspect-ratio: 1;
+    will-change: transform; pointer-events: none;
+  }
+  #plane svg { width: 100%; height: 100%; overflow: visible; display: block; }
+  #plane .flip { width: 100%; height: 100%; transform-origin: center; }
+
+  .light { transform-box: fill-box; transform-origin: center; }
+  .red   { fill: #ff2b2b; animation: blinkR 1.6s infinite; }
+  .green { fill: #20ff6a; animation: blinkG 1.6s infinite; }
+  .glowR { fill: #ff2b2b; animation: blinkR 1.6s infinite; filter: blur(5px); }
+  .glowG { fill: #20ff6a; animation: blinkG 1.6s infinite; filter: blur(5px); }
+  .strobe { fill: #fff; opacity: 0; animation: strobe 3.2s infinite; filter: blur(2px); }
+  /* alternating blink: red on, then green on */
+  @keyframes blinkR { 0%,45% { opacity: 1; transform: scale(1.2) } 50%,100% { opacity: .12; transform: scale(.8) } }
+  @keyframes blinkG { 0%,45% { opacity: .12; transform: scale(.8) } 50%,100% { opacity: 1; transform: scale(1.2) } }
+  @keyframes strobe { 0%,88%,94%,100% { opacity: 0 } 90%,92% { opacity: 1 } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sep i, .red, .green, .glowR, .glowG, .strobe { animation-duration: 4s; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<div class="stage">
+  <div class="clock" id="clock"><span class="ampm" id="ampm"></span></div>
+  <div class="date" id="date"></div>
+</div>
+
+<div id="plane" aria-hidden="true">
+  <div class="flip" id="planeFlip">
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <!-- airliner silhouette traced from the reference icon, nose to the right -->
+      <path fill="var(--plane)" d="M69.7 6.3 L69.7 9.3 L73.3 20.6 L73.3 23.2 L75.9 29.9 L78.4 42.2 L79.5 43.8 L90.8 86.4 L89.7 87.4 L55.3 87.4 L34.3 91.0 L29.6 84.3 L20.4 66.9 L17.3 63.8 L9.1 63.8 L10.1 71.0 L16.3 91.5 L16.3 95.1 L9.1 98.7 L9.6 101.8 L16.3 104.9 L16.3 108.5 L10.1 129.0 L9.1 136.2 L17.3 136.2 L20.4 133.1 L29.6 115.7 L34.3 109.0 L55.3 112.6 L89.7 112.6 L90.8 114.6 L88.2 121.3 L85.6 133.6 L84.6 135.2 L75.9 170.1 L69.7 190.7 L69.7 193.7 L80.0 193.7 L83.6 191.2 L111.3 141.9 L112.8 140.8 L124.1 140.8 L127.2 137.8 L127.7 131.6 L125.2 128.0 L120.5 127.5 L120.0 125.4 L127.7 113.1 L167.8 113.6 L172.9 112.6 L180.1 110.0 L187.3 105.4 L190.4 102.3 L190.9 98.7 L187.3 94.6 L180.1 90.0 L167.8 86.4 L127.7 86.9 L120.0 74.6 L120.5 72.5 L123.6 72.5 L126.7 70.5 L127.7 68.4 L127.2 62.2 L124.1 59.2 L111.8 58.7 L104.1 46.3 L102.6 42.2 L99.5 38.1 L97.9 34.0 L94.9 29.9 L83.6 8.8 L80.0 6.3 Z"/>
+      <!-- wingtip lights -->
+      <circle class="light glowR" cx="72" cy="9" r="8"/>
+      <circle class="light red"   cx="72" cy="9" r="3.6"/>
+      <circle class="light glowG" cx="72" cy="191" r="8"/>
+      <circle class="light green" cx="72" cy="191" r="3.6"/>
+      <!-- tail strobe -->
+      <circle class="strobe" cx="13" cy="100" r="5"/>
+    </svg>
+  </div>
+</div>
+
+<script>
+(function () {
+  /* ---------- Flip clock ---------- */
+  var clock = document.getElementById('clock');
+  var dateEl = document.getElementById('date');
+  var ampm = document.getElementById('ampm');
+
+  function makeCard() {
+    var c = document.createElement('div');
+    c.className = 'card';
+    c.innerHTML =
+      '<div class="half top"><span>0</span></div>' +
+      '<div class="half bottom"><span>0</span></div>' +
+      '<div class="flap f-top"><span>0</span></div>' +
+      '<div class="flap f-bot"><span>0</span></div>';
+    c.dataset.v = '0';
+    return c;
+  }
+  function makeSep() {
+    var s = document.createElement('div');
+    s.className = 'sep';
+    s.innerHTML = '<i></i><i></i>';
+    return s;
+  }
+  var cards = [];
+  for (var g = 0; g < 3; g++) {
+    var grp = document.createElement('div');
+    grp.className = 'group';
+    for (var d = 0; d < 2; d++) { var c = makeCard(); cards.push(c); grp.appendChild(c); }
+    clock.appendChild(grp);
+    if (g < 2) clock.appendChild(makeSep());
+  }
+
+  function q(c, s) { return c.querySelector(s + ' span'); }
+  function setDigit(c, v, instant) {
+    var old = c.dataset.v;
+    if (old === v) return;
+    c.dataset.v = v;
+    if (instant) {
+      ['.top', '.bottom', '.f-top', '.f-bot'].forEach(function (s) { q(c, s).textContent = v; });
+      return;
+    }
+    q(c, '.top').textContent = v;          // new value behind
+    q(c, '.bottom').textContent = old;     // old value behind
+    q(c, '.f-top').textContent = old;      // flap falling
+    q(c, '.f-bot').textContent = v;        // flap landing
+    c.classList.remove('go'); void c.offsetWidth; c.classList.add('go');
+    clearTimeout(c._t);
+    c._t = setTimeout(function () {
+      q(c, '.bottom').textContent = v;
+      c.classList.remove('go');
+    }, 620);
+  }
+
+  function tick(instant) {
+    var n = new Date(), h = n.getHours();
+    var pm = h >= 12; h = h % 12 || 12;
+    if (ampm.textContent !== (pm ? 'PM' : 'AM')) ampm.textContent = pm ? 'PM' : 'AM';
+    var s = String(h).padStart(2, '0') + String(n.getMinutes()).padStart(2, '0') + String(n.getSeconds()).padStart(2, '0');
+    for (var i = 0; i < 6; i++) setDigit(cards[i], s[i], instant);
+    var ds = n.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    if (dateEl.textContent !== ds) dateEl.textContent = ds;
+  }
+  tick(true);
+  setInterval(tick, 250);
+  /* double-click anywhere: toggle full screen */
+  document.addEventListener('dblclick', function () {
+    var el = document.documentElement;
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) req.call(el);
+    }
+  });
+
+  /* ---------- Stars ---------- */
+  var cv = document.getElementById('stars'), cx = cv.getContext('2d'), stars = [];
+  function sizeStars() {
+    var r = window.devicePixelRatio || 1;
+    cv.width = innerWidth * r; cv.height = innerHeight * r;
+    cx.setTransform(r, 0, 0, r, 0, 0);
+    stars = [];
+    var n = Math.floor(innerWidth * innerHeight / 5000);
+    for (var i = 0; i < n; i++) stars.push({
+      x: Math.random() * innerWidth, y: Math.random() * innerHeight,
+      r: Math.random() * 1.2 + .2, p: Math.random() * 6.28, s: Math.random() * .8 + .2
+    });
+  }
+  function drawStars(t) {
+    cx.clearRect(0, 0, innerWidth, innerHeight);
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      cx.globalAlpha = .35 + .35 * Math.sin(t / 1000 * s.s + s.p);
+      cx.fillStyle = '#dfe8ff';
+      cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, 6.28); cx.fill();
+    }
+  }
+  addEventListener('resize', function () { sizeStars(); y1 = 0; });
+  sizeStars();
+
+  /* ---------- Plane: slow crossing, alternating direction ---------- */
+  var plane = document.getElementById('plane'), flip = document.getElementById('planeFlip');
+  var CROSS_MS = 60000;           // one full crossing takes 60 seconds
+  var DIR = 1;                    // 1 = flies left→right, -1 = flies right→left
+  var start = null, y0 = 0, y1 = 0;
+  flip.style.transform = DIR === 1 ? 'rotate(0deg)' : 'rotate(180deg)';
+
+  function pickY() {              // keep the plane in the sky above the clock
+    var maxY = Math.max(10, clock.getBoundingClientRect().top - plane.offsetWidth - 14);
+    return 10 + Math.random() * (maxY - 10);
+  }
+  function newPass(now) {
+    start = now;
+    y0 = y1 || pickY();           // continue from where the last pass ended
+    y1 = pickY();                 // drift gently to a new altitude
+  }
+  function frame(now) {
+    if (start === null) newPass(now);
+    var w = plane.offsetWidth, span = innerWidth + w * 2;   // fully off-screen at both ends
+    var p = (now - start) / CROSS_MS;
+    if (p >= 1) { newPass(now); p = 0; }                    // leaves one edge, re-enters from the other
+    var x = DIR === 1 ? -w + span * p : innerWidth + w - span * p;
+    var y = y0 + (y1 - y0) * p;
+    plane.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)';
+    drawStars(now);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
