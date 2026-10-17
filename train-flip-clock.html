@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@500;600&display=swap" rel="stylesheet">
+<title>Flip Clock with Night Train</title>
+<style>
+  :root {
+    --sky-top: #050a1c;
+    --sky-bottom: #14264d;
+    --card: #1b1d22;
+    --card-edge: #0c0d10;
+    --digit: #f2ead8;
+    --h: clamp(72px, 17vw, 210px);
+    --w: calc(var(--h) * 0.72);
+    --gh: clamp(44px, 8vh, 80px);
+    --th: clamp(52px, 6.2vw, 84px);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    overflow: hidden;
+    background: linear-gradient(to bottom, var(--sky-top), var(--sky-bottom));
+    font-family: Bahnschrift, "DIN Condensed", "Arial Narrow", Impact, sans-serif;
+    user-select: none;
+  }
+  #stars { position: fixed; inset: 0; width: 100%; height: 100%; }
+
+  /* ---------- Clock ---------- */
+  .stage {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 3vh 0 calc(var(--gh) + var(--th) + 2vh);
+    z-index: 3;
+  }
+  .clock {
+    display: flex; align-items: center; justify-content: center;
+    gap: calc(var(--h) * 0.14);
+    position: relative;
+  }
+  .ampm {
+    position: absolute; right: 0; top: calc(100% + var(--h) * 0.1);
+    font-family: "Highway Gothic", "FHWA Series C", "Overpass", Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif;
+    font-weight: 600; letter-spacing: .06em; font-size: calc(var(--h) * 0.16);
+    color: var(--digit); opacity: .7;
+  }
+  .date {
+    margin-top: calc(var(--h) * 0.28);
+    font-family: "Highway Gothic", "FHWA Series C", "Overpass", "Roadgeek 2005 Series C", Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif;
+    font-weight: 600; letter-spacing: .04em;
+    font-size: calc(var(--h) * 0.24);
+    color: var(--digit); opacity: .9; text-align: center;
+  }
+  .group { display: flex; gap: calc(var(--h) * 0.06); }
+  .sep { display: flex; flex-direction: column; gap: calc(var(--h) * 0.16); }
+  .sep i {
+    width: calc(var(--h) * 0.07); height: calc(var(--h) * 0.07);
+    border-radius: 50%; background: var(--digit); opacity: .85;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: .85 } 50% { opacity: .25 } }
+
+  .card {
+    position: relative; width: var(--w); height: var(--h);
+    perspective: calc(var(--h) * 3);
+    font-weight: 700; font-size: calc(var(--h) * 0.92);
+    color: var(--digit);
+    filter: drop-shadow(0 12px 18px rgba(0,0,0,.45));
+  }
+  .half, .flap {
+    position: absolute; left: 0; width: 100%; height: 50%;
+    overflow: hidden; background: var(--card);
+  }
+  .top, .flap.f-top { top: 0; border-radius: 10px 10px 0 0; border-bottom: 1px solid var(--card-edge); }
+  .bottom, .flap.f-bot { bottom: 0; border-radius: 0 0 10px 10px; background: #202328; }
+  .half span, .flap span {
+    position: absolute; left: 0; width: 100%; height: 200%;
+    line-height: var(--h); text-align: center;
+  }
+  .top span, .f-top span { top: 0; }
+  .bottom span, .f-bot span { top: -100%; }
+
+  .flap { display: none; backface-visibility: hidden; }
+  .f-top { transform-origin: bottom; z-index: 3; }
+  .f-bot { transform-origin: top; z-index: 3; transform: rotateX(90deg); }
+  .card.go .f-top { display: block; animation: flipTop .3s ease-in forwards; }
+  .card.go .f-bot { display: block; animation: flipBot .3s .3s ease-out forwards; }
+  @keyframes flipTop { to { transform: rotateX(-90deg); } }
+  @keyframes flipBot { to { transform: rotateX(0deg); } }
+
+  /* axle pin */
+  .card::before, .card::after {
+    content: ""; position: absolute; top: calc(50% - 6px); width: 7px; height: 12px;
+    background: #000; z-index: 5; opacity: .6;
+  }
+  .card::before { left: 0; border-radius: 0 4px 4px 0; }
+  .card::after { right: 0; border-radius: 4px 0 0 4px; }
+
+  /* ---------- Ground, track & crossing signal ---------- */
+  #ground {
+    position: fixed; left: 0; right: 0; bottom: 0; height: var(--gh); z-index: 1;
+    background: linear-gradient(#151a25, #07090e);
+  }
+  #ground::before {            /* rail head */
+    content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px;
+    background: linear-gradient(#b4bdcd, #596273);
+  }
+  #ground::after {             /* sleepers */
+    content: ""; position: absolute; left: 0; right: 0; top: 3px; height: 32%;
+    background: repeating-linear-gradient(90deg, #2a2118 0 12px, transparent 12px 30px);
+  }
+  #train { position: fixed; left: 0; bottom: var(--gh); z-index: 2; will-change: transform; pointer-events: none; }
+  #train svg { display: block; overflow: visible; }
+
+  #signal {
+    position: fixed; left: 4vw; bottom: calc(var(--gh) * 0.3); z-index: 4; pointer-events: none;
+    height: clamp(150px, 30vh, 260px); aspect-ratio: 100 / 260;
+  }
+  #signal svg { width: 100%; height: 100%; overflow: visible; display: block; }
+  .lens { fill: #4a1010; }
+  .glow { fill: #ff2b2b; opacity: 0; filter: blur(7px); }
+  #signal.on .lensL { animation: lensA 1s steps(1, end) infinite; }
+  #signal.on .lensR { animation: lensB 1s steps(1, end) infinite; }
+  #signal.on .glowL { animation: glowA 1s steps(1, end) infinite; }
+  #signal.on .glowR { animation: glowB 1s steps(1, end) infinite; }
+  @keyframes lensA { 0% { fill: #ed1c24 } 50% { fill: #4a1010 } }
+  @keyframes lensB { 0% { fill: #4a1010 } 50% { fill: #ed1c24 } }
+  @keyframes glowA { 0% { opacity: .95 } 50% { opacity: 0 } }
+  @keyframes glowB { 0% { opacity: 0 } 50% { opacity: .95 } }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<div class="stage">
+  <div class="clock" id="clock"><span class="ampm" id="ampm"></span></div>
+  <div class="date" id="date"></div>
+</div>
+
+<div id="ground"></div>
+<div id="train" aria-hidden="true"></div>
+
+<div id="signal" aria-hidden="true">
+  <svg viewBox="0 0 100 260" xmlns="http://www.w3.org/2000/svg" font-family="Highway Gothic, Overpass, Bahnschrift, 'DIN Alternate', Arial, Helvetica, sans-serif" font-weight="700">
+    <!-- RAIL ROAD plank (behind the pole) -->
+    <g transform="translate(50 42.5) rotate(45)">
+      <rect x="-49.5" y="-9.75" width="99" height="19.5" rx="3" fill="#eef1f5" stroke="#0b0b0d" stroke-width="1"/>
+      <text x="-27" y="6.2" text-anchor="middle" font-size="17" fill="#0b0b0d" textLength="36" lengthAdjust="spacingAndGlyphs">RAIL</text>
+      <text x="27" y="6.2" text-anchor="middle" font-size="17" fill="#0b0b0d" textLength="38" lengthAdjust="spacingAndGlyphs">ROAD</text>
+    </g>
+    <!-- pole -->
+    <rect x="43.8" y="17.5" width="12.4" height="242.5" fill="#0a0a0c"/>
+    <rect x="44.6" y="17.5" width="2" height="242.5" fill="#fff" opacity=".08"/>
+    <!-- CROSSING plank (in front) -->
+    <g transform="translate(50 42.5) rotate(-45)">
+      <rect x="-49.5" y="-9.75" width="99" height="19.5" rx="3" fill="#eef1f5" stroke="#0b0b0d" stroke-width="1"/>
+      <text x="0" y="6.2" text-anchor="middle" font-size="17" fill="#0b0b0d" textLength="80" lengthAdjust="spacingAndGlyphs">CROSSING</text>
+    </g>
+    <!-- 2 TRACKS plate -->
+    <path d="M39.5 81 H60.5 V99 H80.3 V115.4 H19 V99 H39.5 Z" fill="#eef1f5" stroke="#0b0b0d" stroke-width=".9"/>
+    <text x="50" y="96" text-anchor="middle" font-size="15" fill="#0b0b0d">2</text>
+    <text x="49.7" y="110.6" text-anchor="middle" font-size="11" fill="#0b0b0d" textLength="48" lengthAdjust="spacingAndGlyphs">TRACKS</text>
+    <!-- twin lamps -->
+    <circle cx="26.9" cy="140" r="18.4" fill="#0a0a0c"/>
+    <circle cx="73.1" cy="140" r="18.4" fill="#0a0a0c"/>
+    <circle class="glow glowL" cx="26.9" cy="140" r="21"/>
+    <circle class="glow glowR" cx="73.1" cy="140" r="21"/>
+    <circle class="lens lensL" cx="26.9" cy="140" r="13.2"/>
+    <circle class="lens lensR" cx="73.1" cy="140" r="13.2"/>
+  </svg>
+</div>
+
+<script>
+(function () {
+  /* ---------- Flip clock ---------- */
+  var clock = document.getElementById('clock');
+  var dateEl = document.getElementById('date');
+  var ampm = document.getElementById('ampm');
+
+  function makeCard() {
+    var c = document.createElement('div');
+    c.className = 'card';
+    c.innerHTML =
+      '<div class="half top"><span>0</span></div>' +
+      '<div class="half bottom"><span>0</span></div>' +
+      '<div class="flap f-top"><span>0</span></div>' +
+      '<div class="flap f-bot"><span>0</span></div>';
+    c.dataset.v = '0';
+    return c;
+  }
+  function makeSep() {
+    var s = document.createElement('div');
+    s.className = 'sep';
+    s.innerHTML = '<i></i><i></i>';
+    return s;
+  }
+  var cards = [];
+  for (var g = 0; g < 3; g++) {
+    var grp = document.createElement('div');
+    grp.className = 'group';
+    for (var d = 0; d < 2; d++) { var c = makeCard(); cards.push(c); grp.appendChild(c); }
+    clock.appendChild(grp);
+    if (g < 2) clock.appendChild(makeSep());
+  }
+
+  function q(c, s) { return c.querySelector(s + ' span'); }
+  function setDigit(c, v, instant) {
+    var old = c.dataset.v;
+    if (old === v) return;
+    c.dataset.v = v;
+    if (instant) {
+      ['.top', '.bottom', '.f-top', '.f-bot'].forEach(function (s) { q(c, s).textContent = v; });
+      return;
+    }
+    q(c, '.top').textContent = v;          // new value behind
+    q(c, '.bottom').textContent = old;     // old value behind
+    q(c, '.f-top').textContent = old;      // flap falling
+    q(c, '.f-bot').textContent = v;        // flap landing
+    c.classList.remove('go'); void c.offsetWidth; c.classList.add('go');
+    clearTimeout(c._t);
+    c._t = setTimeout(function () {
+      q(c, '.bottom').textContent = v;
+      c.classList.remove('go');
+    }, 620);
+  }
+
+  function tick(instant) {
+    var n = new Date(), h = n.getHours();
+    var pm = h >= 12; h = h % 12 || 12;
+    if (ampm.textContent !== (pm ? 'PM' : 'AM')) ampm.textContent = pm ? 'PM' : 'AM';
+    var s = String(h).padStart(2, '0') + String(n.getMinutes()).padStart(2, '0') + String(n.getSeconds()).padStart(2, '0');
+    for (var i = 0; i < 6; i++) setDigit(cards[i], s[i], instant);
+    var ds = n.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    if (dateEl.textContent !== ds) dateEl.textContent = ds;
+  }
+  tick(true);
+  setInterval(tick, 250);
+  /* double-click anywhere: toggle full screen */
+  document.addEventListener('dblclick', function () {
+    var el = document.documentElement;
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) req.call(el);
+    }
+  });
+
+  /* ---------- Stars ---------- */
+  var cv = document.getElementById('stars'), cx = cv.getContext('2d'), stars = [];
+  function sizeStars() {
+    var r = window.devicePixelRatio || 1;
+    cv.width = innerWidth * r; cv.height = innerHeight * r;
+    cx.setTransform(r, 0, 0, r, 0, 0);
+    stars = [];
+    var n = Math.floor(innerWidth * innerHeight / 5000);
+    for (var i = 0; i < n; i++) stars.push({
+      x: Math.random() * innerWidth, y: Math.random() * innerHeight,
+      r: Math.random() * 1.2 + .2, p: Math.random() * 6.28, s: Math.random() * .8 + .2
+    });
+  }
+  function drawStars(t) {
+    cx.clearRect(0, 0, innerWidth, innerHeight);
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      cx.globalAlpha = .35 + .35 * Math.sin(t / 1000 * s.s + s.p);
+      cx.fillStyle = '#dfe8ff';
+      cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, 6.28); cx.fill();
+    }
+  }
+  addEventListener('resize', function () { sizeStars(); buildTrain(false); });
+  sizeStars();
+
+  /* ---------- Union Pacific freight, left → right ---------- */
+  var trainEl = document.getElementById('train'), signal = document.getElementById('signal');
+  var LIVERIES = [
+    { body: '#f2b51d', nose: '#f2b51d', lower: '#858b94', stripe: '#c8102e', ink: '#c8102e', text: 'UNION PACIFIC', x: 8,  tl: 70, fs: 9 },
+    { body: '#1d3f78', nose: '#f0c21a', lower: '#7d838c', stripe: '#f0c21a', ink: '#f0c21a', text: 'CSX',           x: 20, tl: 36, fs: 14 },
+    { body: '#c1121f', nose: '#c1121f', lower: '#8a8f97', stripe: '#f2f2f2', ink: '#ffffff', text: 'CANADIAN PACIFIC', x: 6, tl: 72, fs: 8 },
+    { body: '#17191d', nose: '#17191d', lower: '#4a4f58', stripe: '#e8e8e8', ink: '#ffffff', text: '', logo: true, x: 6, tl: 72, fs: 8 },
+    { body: '#e8650d', nose: '#e8650d', lower: '#1a1c20', stripe: '#1a1c20', ink: '#15171a', text: 'BNSF',          x: 16, tl: 44, fs: 14 }
+  ];
+  var liveryIdx = -1;
+  var PRE = 4, GAP = 8;            // seconds: signal warning before the head arrives, pause between trains
+  var trainW = 0, cycleStart = null;
+
+  function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  function wheels(xs, r, y) {
+    return xs.map(function (x) {
+      return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="#0c0e12"/><circle cx="' + x + '" cy="' + y + '" r="' + (r * .35) + '" fill="#3a404b"/>';
+    }).join('');
+  }
+  function base() {
+    return '<rect x="0" y="56" width="100" height="5" fill="#15171b"/>' +
+           '<rect x="8" y="60" width="24" height="4" fill="#0f1114"/><rect x="68" y="60" width="24" height="4" fill="#0f1114"/>' +
+           wheels([14, 26, 74, 86], 5, 65);
+  }
+  function rib(x, y, w, h) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#rib)"/>'; }
+
+  function boxcar() {
+    var c = pick(['#7a3b2e', '#5b3a2a', '#8a2f2f', '#3d4b3f', '#4a4f5c']);
+    return base() + '<rect x="1" y="14" width="98" height="42" fill="' + c + '"/>' + rib(1, 14, 98, 42) +
+      '<rect x="0" y="12" width="100" height="3" fill="#000" opacity=".3"/>' +
+      '<rect x="36" y="17" width="26" height="36" fill="#000" opacity=".2"/><rect x="49" y="17" width="1" height="36" fill="#000" opacity=".4"/>' +
+      '<rect x="8" y="24" width="18" height="2" fill="#fff" opacity=".35"/><rect x="8" y="29" width="12" height="2" fill="#fff" opacity=".25"/>';
+  }
+  function tank() {
+    var c = pick(['#2c3036', '#9aa2ad', '#3b3f46', '#b8bcc4']);
+    return base() + '<rect x="14" y="50" width="72" height="6" fill="#1a1c21"/>' +
+      '<rect x="4" y="20" width="92" height="32" rx="16" fill="' + c + '"/>' +
+      '<rect x="10" y="24" width="80" height="4" rx="2" fill="#fff" opacity=".13"/>' +
+      '<rect x="44" y="16" width="12" height="5" rx="1" fill="#000" opacity=".4"/><rect x="12" y="19" width="76" height="1.5" fill="#000" opacity=".4"/>' +
+      '<rect x="30" y="20" width="1.5" height="32" fill="#000" opacity=".3"/><rect x="70" y="20" width="1.5" height="32" fill="#000" opacity=".3"/>';
+  }
+  function hopper() {
+    var c = pick(['#8a8f96', '#6b4e3d', '#54595f', '#9b9fa6']);
+    return base() + '<path d="M1 16 H99 V42 L90 56 H10 L1 42 Z" fill="' + c + '"/>' + rib(1, 16, 98, 40) +
+      '<rect x="14" y="12" width="12" height="4" fill="#000" opacity=".4"/><rect x="44" y="12" width="12" height="4" fill="#000" opacity=".4"/><rect x="74" y="12" width="12" height="4" fill="#000" opacity=".4"/>' +
+      '<rect x="8" y="24" width="16" height="2" fill="#fff" opacity=".3"/>';
+  }
+  function boxes() {
+    var cs = ['#1f5fa8', '#d4531a', '#2b8a5b', '#c9a227', '#8a2f2f', '#4a4f5c'];
+    return '<rect x="0" y="52" width="100" height="5" fill="#1a1c21"/>' +
+      '<rect x="8" y="60" width="24" height="4" fill="#0f1114"/><rect x="68" y="60" width="24" height="4" fill="#0f1114"/>' + wheels([14, 26, 74, 86], 5, 65) +
+      '<rect x="2" y="22" width="46" height="30" fill="' + pick(cs) + '"/>' + rib(2, 22, 46, 30) +
+      '<rect x="52" y="22" width="46" height="30" fill="' + pick(cs) + '"/>' + rib(52, 22, 46, 30) +
+      '<rect x="6" y="27" width="14" height="2" fill="#fff" opacity=".45"/><rect x="56" y="27" width="14" height="2" fill="#fff" opacity=".45"/>';
+  }
+  function gondola() {
+    return base() + '<rect x="1" y="24" width="98" height="32" fill="#4a4f57"/>' + rib(1, 24, 98, 32) +
+      '<path d="M3 24 Q22 12 48 17 T97 19 V25 H3 Z" fill="#101114"/>';
+  }
+  var NS_MARK = 'M5.0 37.0 L17.0 37.0 L21.3 35.3 L20.3 35.0 L5.7 35.0Z M6.0 34.1 L20.3 34.1 L22.9 32.9 L24.7 32.3 L24.0 32.1 L6.7 32.1Z M7.0 31.2 L22.4 31.2 L25.0 30.0 L27.8 29.2 L7.7 29.2Z M8.0 28.2 L24.3 28.2 L27.1 27.5 L28.6 27.3 L30.1 27.2 L27.3 26.5 L28.2 26.3 L8.8 26.3Z M37.0 37.1 L48.3 37.1 L50.8 30.5 L54.1 37.0 L60.2 37.0 L61.0 34.9 L61.6 35.8 L62.5 36.6 L63.5 37.1 L64.7 37.3 L68.8 37.6 L71.5 37.6 L75.3 37.3 L76.3 37.0 L77.3 36.4 L78.1 35.8 L78.7 34.9 L79.3 33.7 L79.6 32.5 L79.5 31.6 L79.3 31.0 L78.9 30.5 L78.3 30.0 L77.0 29.2 L75.2 28.9 L70.3 28.3 L70.0 28.1 L69.7 27.8 L69.8 27.3 L70.1 27.0 L70.6 26.8 L73.0 26.8 L73.6 27.0 L73.9 27.2 L73.9 27.7 L73.7 28.1 L73.8 28.2 L80.4 28.4 L80.9 27.4 L81.0 26.3 L80.5 25.3 L79.5 24.6 L78.3 24.1 L75.6 23.6 L73.4 23.4 L71.0 23.4 L68.2 23.6 L66.2 24.1 L65.1 24.6 L64.5 25.1 L64.4 24.9 L65.0 23.4 L59.1 23.4 L56.7 30.1 L53.3 23.3 L42.1 23.3 L41.8 23.7Z M61.8 32.5 L62.7 29.8 L63.1 30.4 L63.6 31.0 L65.0 31.7 L67.0 32.2 L72.2 32.6 L72.6 32.9 L72.7 33.3 L72.4 33.8 L71.8 34.1 L69.5 34.2 L68.8 34.1 L68.2 33.8 L67.9 33.4 L68.0 32.8Z M9.1 25.3 L31.1 25.3 L31.2 25.1 L30.6 24.9 L30.3 24.6 L31.4 24.5 L31.8 23.3 L9.8 23.3Z';
+  function HORSE(ink) {            // Norfolk Southern speed stripes + NS, traced from the supplied logo
+    return '<path fill="' + ink + '" fill-rule="evenodd" d="' + NS_MARK + '"/>';
+  }
+  function loco(lead, lv) {
+    return '<rect x="2" y="54" width="118" height="6" fill="#1a1c21"/>' +
+      '<rect x="2" y="44" width="120" height="12" fill="' + lv.lower + '"/>' +
+      '<path d="M2 18 H84 V44 H2 Z" fill="' + lv.body + '"/>' +
+      '<path d="M84 8 H108 V44 H84 Z" fill="' + lv.body + '"/>' +
+      '<path d="M108 24 H121 L123 44 H108 Z" fill="' + lv.nose + '"/>' +
+      '<rect x="82" y="5" width="28" height="4" fill="#6c727c"/><rect x="2" y="16" width="82" height="3" fill="#6c727c"/>' +
+      '<rect x="10" y="11" width="22" height="5" fill="#5a606a"/><rect x="40" y="12" width="14" height="4" fill="#5a606a"/>' +
+      '<rect x="90" y="13" width="14" height="13" rx="2" fill="#1c2635"/><rect x="91" y="14" width="5" height="11" fill="#fff" opacity=".1"/>' +
+      '<rect x="2" y="43" width="120" height="3" fill="' + lv.stripe + '"/>' +
+      (lv.logo ? HORSE(lv.ink) :
+        '<text x="' + lv.x + '" y="35" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="' + lv.fs + '" fill="' + lv.ink + '" textLength="' + lv.tl + '" lengthAdjust="spacingAndGlyphs">' + lv.text + '</text>') +
+      '<rect x="10" y="57" width="36" height="7" fill="#101216"/><rect x="78" y="57" width="36" height="7" fill="#101216"/>' +
+      wheels([16, 28, 40, 84, 96, 108], 6, 64) +
+      (lead ? '<polygon points="122,30 340,6 340,56" fill="url(#beam)"/><circle cx="122" cy="30" r="9" fill="#fff6c8" opacity=".35"/>' : '') +
+      '<circle cx="121" cy="30" r="3" fill="#fff8dc"/>';
+  }
+
+  function buildTrain(next) {
+    if (next) liveryIdx = (liveryIdx + 1) % LIVERIES.length;
+    var lv = LIVERIES[Math.max(0, liveryIdx)];
+    var th = Math.max(52, Math.min(84, innerWidth * 0.062));
+    var n = 11 + Math.floor(Math.random() * 6), parts = '', x = 0, i, f;
+    var kinds = [boxcar, boxcar, tank, hopper, boxes, gondola];
+    for (i = 0; i < n; i++) {
+      f = pick(kinds);
+      parts += '<g transform="translate(' + x + ' 0)">' + f() + '</g>'; x += 104;
+    }
+    parts += '<g transform="translate(' + x + ' 0)">' + loco(false, lv) + '</g>'; x += 128;
+    parts += '<g transform="translate(' + x + ' 0)">' + loco(true, lv) + '</g>'; x += 124;
+    parts += '<circle cx="1" cy="40" r="2.4" fill="#ff2a2a"/><circle cx="1" cy="40" r="7" fill="#ff2a2a" opacity=".3"/>'; // rear marker
+    trainEl.innerHTML =
+      '<svg viewBox="0 0 ' + x + ' 70" xmlns="http://www.w3.org/2000/svg" style="height:' + th + 'px;width:' + (x * th / 70) + 'px">' +
+      '<defs><pattern id="rib" width="5" height="4" patternUnits="userSpaceOnUse"><rect width="1.3" height="4" fill="#000" opacity=".22"/></pattern>' +
+      '<linearGradient id="beam" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#fff6c8" stop-opacity=".5"/><stop offset="1" stop-color="#fff6c8" stop-opacity="0"/></linearGradient></defs>' +
+      parts + '</svg>';
+    trainW = x * th / 70;
+  }
+  buildTrain(true);
+
+  function frame(now) {
+    if (cycleStart === null) cycleStart = now;
+    var W = innerWidth, speed = W * 0.075;                       // px per second
+    var t = (now - cycleStart) / 1000;
+    var travel = PRE + (W + trainW) / speed;                     // head enters PRE seconds after the signal starts
+    if (t > travel + GAP) { cycleStart = now; buildTrain(true); t = 0; }
+    var head = speed * (t - PRE);                                // right edge of the lead locomotive
+    trainEl.style.transform = 'translateX(' + (head - trainW).toFixed(1) + 'px)';
+    var r = signal.getBoundingClientRect(), sx = r.left + r.width / 2;
+    var tOff = PRE + (sx + speed * 2.5 + trainW) / speed;         // lights stop shortly after the last car clears
+    signal.classList.toggle('on', t < tOff);
+    drawStars(now);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
