@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@500;600&display=swap" rel="stylesheet">
+<title>Flip Clock with Lighthouse</title>
+<style>
+  :root {
+    --sky-top: #040813;
+    --sky-bottom: #12294f;
+    --card: #1b1d22;
+    --card-edge: #0c0d10;
+    --digit: #f2ead8;
+    --h: clamp(72px, 17vw, 210px);
+    --w: calc(var(--h) * 0.72);
+    --gh: clamp(44px, 8vh, 80px);
+    --lh: clamp(130px, 30vh, 260px);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    overflow: hidden;
+    background: linear-gradient(to bottom, var(--sky-top), var(--sky-bottom));
+    font-family: Bahnschrift, "DIN Condensed", "Arial Narrow", Impact, sans-serif;
+    user-select: none;
+  }
+  #stars { position: fixed; inset: 0; width: 100%; height: 100%; }
+
+  /* ---------- Clock ---------- */
+  .stage {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 3vh 0 calc(var(--gh) + 2vh);
+    z-index: 3;
+  }
+  .clock {
+    display: flex; align-items: center; justify-content: center;
+    gap: calc(var(--h) * 0.14);
+    position: relative;
+  }
+  .ampm {
+    position: absolute; right: 0; top: calc(100% + var(--h) * 0.1);
+    font-family: "Highway Gothic", "FHWA Series C", "Overpass", Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif;
+    font-weight: 600; letter-spacing: .06em; font-size: calc(var(--h) * 0.16);
+    color: var(--digit); opacity: .7;
+  }
+  .date {
+    margin-top: calc(var(--h) * 0.28);
+    font-family: "Highway Gothic", "FHWA Series C", "Overpass", "Roadgeek 2005 Series C", Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif;
+    font-weight: 600; letter-spacing: .04em;
+    font-size: calc(var(--h) * 0.24);
+    color: var(--digit); opacity: .9; text-align: center;
+  }
+  .group { display: flex; gap: calc(var(--h) * 0.06); }
+  .sep { display: flex; flex-direction: column; gap: calc(var(--h) * 0.16); }
+  .sep i {
+    width: calc(var(--h) * 0.07); height: calc(var(--h) * 0.07);
+    border-radius: 50%; background: var(--digit); opacity: .85;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: .85 } 50% { opacity: .25 } }
+
+  .card {
+    position: relative; width: var(--w); height: var(--h);
+    perspective: calc(var(--h) * 3);
+    font-weight: 700; font-size: calc(var(--h) * 0.92);
+    color: var(--digit);
+    filter: drop-shadow(0 12px 18px rgba(0,0,0,.45));
+  }
+  .half, .flap {
+    position: absolute; left: 0; width: 100%; height: 50%;
+    overflow: hidden; background: var(--card);
+  }
+  .top, .flap.f-top { top: 0; border-radius: 10px 10px 0 0; border-bottom: 1px solid var(--card-edge); }
+  .bottom, .flap.f-bot { bottom: 0; border-radius: 0 0 10px 10px; background: #202328; }
+  .half span, .flap span {
+    position: absolute; left: 0; width: 100%; height: 200%;
+    line-height: var(--h); text-align: center;
+  }
+  .top span, .f-top span { top: 0; }
+  .bottom span, .f-bot span { top: -100%; }
+
+  .flap { display: none; backface-visibility: hidden; }
+  .f-top { transform-origin: bottom; z-index: 3; }
+  .f-bot { transform-origin: top; z-index: 3; transform: rotateX(90deg); }
+  .card.go .f-top { display: block; animation: flipTop .3s ease-in forwards; }
+  .card.go .f-bot { display: block; animation: flipBot .3s .3s ease-out forwards; }
+  @keyframes flipTop { to { transform: rotateX(-90deg); } }
+  @keyframes flipBot { to { transform: rotateX(0deg); } }
+
+  /* axle pin */
+  .card::before, .card::after {
+    content: ""; position: absolute; top: calc(50% - 6px); width: 7px; height: 12px;
+    background: #000; z-index: 5; opacity: .6;
+  }
+  .card::before { left: 0; border-radius: 0 4px 4px 0; }
+  .card::after { right: 0; border-radius: 4px 0 0 4px; }
+
+  /* ---------- Sea ---------- */
+  #sea {
+    position: fixed; left: 0; right: 0; bottom: 0; height: var(--gh); z-index: 1;
+    background: linear-gradient(#173560, #07101f);
+    overflow: hidden;
+  }
+  #sea::before, #sea::after {
+    content: ""; position: absolute; left: 0; right: 0; height: 14px;
+    background-repeat: repeat-x;
+  }
+  #sea::before { top: -6px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='14' viewBox='0 0 120 14'%3E%3Cpath d='M0 7 Q15 0 30 7 T60 7 T90 7 T120 7 V14 H0Z' fill='%231a3a63'/%3E%3C/svg%3E"); background-size: 120px 14px; animation: drift 9s linear infinite; }
+  #sea::after { top: 12px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='12' viewBox='0 0 80 12'%3E%3Cpath d='M0 6 Q10 0 20 6 T40 6 T60 6 T80 6 V12 H0Z' fill='%230d2444'/%3E%3C/svg%3E"); background-size: 80px 12px; animation: drift 6s linear infinite reverse; opacity: .9; }
+  @keyframes drift { to { background-position-x: 120px; } }
+
+  /* ---------- Lighthouse ---------- */
+  #lighthouse {
+    position: fixed; left: 5vw; bottom: calc(var(--gh) * 0.45); z-index: 2; pointer-events: none;
+    height: var(--lh); aspect-ratio: 100 / 240;
+  }
+  #lighthouse svg { width: 100%; height: 100%; overflow: visible; display: block; }
+  .beams { transform-box: view-box; transform-origin: 50px 46px; animation: sweep 20s ease-in-out infinite; }
+  @keyframes sweep { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(-1); } }
+  .lamp { animation: flicker 3s ease-in-out infinite; }
+  @keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: .82; } }
+  .halo { animation: halo 6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes halo { 0%, 100% { opacity: .55; transform: scale(1); } 50% { opacity: .9; transform: scale(1.25); } }
+
+  /* ---------- Distant ships ---------- */
+  .ship {
+    position: fixed; left: 0; z-index: 1; pointer-events: none;
+    bottom: calc(var(--gh) - 6px); width: var(--w);
+    animation: sail var(--d) linear 1 forwards; animation-delay: var(--dl);
+  }
+  .ship.rtl { animation-name: sailR; }
+  .ship .flip { transform: scaleX(-1); }
+  .ship svg { display: block; width: 100%; animation: bob 7s ease-in-out infinite; }
+  .blink { animation: blink 1.6s steps(1, end) infinite; }
+  .blink.slow { animation-duration: 2.3s; }
+  @keyframes sail  { from { transform: translateX(-100%); } to { transform: translateX(100vw); } }
+  @keyframes sailR { from { transform: translateX(100vw); } to { transform: translateX(-100%); } }
+  @keyframes bob { 0%, 100% { transform: translateY(0) rotate(-.3deg); } 50% { transform: translateY(1.5px) rotate(.3deg); } }
+  @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<div class="stage">
+  <div class="clock" id="clock"><span class="ampm" id="ampm"></span></div>
+  <div class="date" id="date"></div>
+</div>
+
+<div id="lighthouse" aria-hidden="true">
+  <svg viewBox="0 0 100 240" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="bm" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#fff3b8" stop-opacity=".8"/><stop offset="1" stop-color="#fff3b8" stop-opacity="0"/></linearGradient>
+      <radialGradient id="hl"><stop offset="0" stop-color="#ffe9a0"/><stop offset="1" stop-color="#ffe9a0" stop-opacity="0"/></radialGradient>
+      <clipPath id="tw"><path d="M27 218 L36 100 H64 L73 218 Z"/></clipPath>
+    </defs>
+    <!-- thick sweeping beam -->
+    <g class="beams">
+      <polygon points="50,43 1600,-40 1600,132 50,49" fill="url(#bm)"/>
+    </g>
+    <circle class="halo" cx="50" cy="46" r="30" fill="url(#hl)"/>
+    <!-- rock -->
+    <path d="M-8 248 L4 228 L20 218 L36 222 L66 220 L82 216 L98 230 L110 248 Z" fill="#161a22"/>
+    <path d="M4 228 L20 218 L28 224 L14 236 Z" fill="#232a36"/>
+    <!-- tapered tower with black spiral bands -->
+    <g clip-path="url(#tw)">
+      <rect x="20" y="96" width="60" height="126" fill="#eceff2"/>
+      <polygon points="20,136 80,100 80,128 20,164" fill="#14171d"/>
+      <polygon points="20,196 80,160 80,188 20,224" fill="#14171d"/>
+      <rect x="20" y="96" width="14" height="126" fill="#fff" opacity=".12"/>
+      <rect x="58" y="96" width="22" height="126" fill="#000" opacity=".22"/>
+    </g>
+    <rect x="53" y="168" width="7" height="15" fill="#f4f4f2"/><rect x="54.3" y="169.6" width="4.4" height="11.4" fill="#ffd77e"/>
+    <!-- black bracketed gallery -->
+    <path d="M24 80 H76 L71 86 H29 Z" fill="#14171d"/>
+    <path d="M33 86 H67 L64 100 H36 Z" fill="#14171d"/>
+    <path d="M38 87 V99 M44 87 V99 M56 87 V99 M62 87 V99" stroke="#2c323e" stroke-width="1.4"/>
+    <rect x="48" y="88" width="4" height="9" fill="#ffe9a8"/>
+    <rect x="33" y="100" width="34" height="3" fill="#14171d"/>
+    <!-- red watch room and railing -->
+    <rect x="38" y="58" width="24" height="22" fill="#d42b2b"/><rect x="54" y="58" width="8" height="22" fill="#000" opacity=".18"/>
+    <path d="M27 72 H73 M27 80 H73 M27 72 V80 M31 72 V80 M35 72 V80 M39 72 V80 M43 72 V80 M47 72 V80 M51 72 V80 M55 72 V80 M59 72 V80 M63 72 V80 M67 72 V80 M71 72 V80 " stroke="#d42b2b" stroke-width="1.1" fill="none"/>
+    <!-- lantern glass -->
+    <rect x="40" y="36" width="20" height="22" fill="#ffe08a" class="lamp"/>
+    <circle cx="50" cy="46" r="5" fill="#fffbe6" class="lamp"/>
+    <rect x="44.4" y="36" width="1.2" height="22" fill="#cfc8a6"/><rect x="49.4" y="36" width="1.2" height="22" fill="#cfc8a6"/><rect x="54.4" y="36" width="1.2" height="22" fill="#cfc8a6"/>
+    <path d="M36 48 H64 M36 54 H64 M36 48 V54 M64 48 V54 M43 48 V54 M57 48 V54" stroke="#d42b2b" stroke-width="1" fill="none"/>
+    <!-- red dome, ball and rod -->
+    <path d="M37 36 Q50 20 63 36 Z" fill="#d42b2b"/><rect x="37" y="35" width="26" height="2.4" fill="#a81f1f"/>
+    <circle cx="50" cy="22" r="2.6" fill="#d42b2b"/><rect x="49.5" y="8" width="1" height="12" fill="#2a2f3a"/>
+  </svg>
+</div>
+
+<div id="sea"></div>
+
+<script>
+(function () {
+  /* ---------- Flip clock ---------- */
+  var clock = document.getElementById('clock');
+  var dateEl = document.getElementById('date');
+  var ampm = document.getElementById('ampm');
+
+  function makeCard() {
+    var c = document.createElement('div');
+    c.className = 'card';
+    c.innerHTML =
+      '<div class="half top"><span>0</span></div>' +
+      '<div class="half bottom"><span>0</span></div>' +
+      '<div class="flap f-top"><span>0</span></div>' +
+      '<div class="flap f-bot"><span>0</span></div>';
+    c.dataset.v = '0';
+    return c;
+  }
+  function makeSep() {
+    var s = document.createElement('div');
+    s.className = 'sep';
+    s.innerHTML = '<i></i><i></i>';
+    return s;
+  }
+  var cards = [];
+  for (var g = 0; g < 3; g++) {
+    var grp = document.createElement('div');
+    grp.className = 'group';
+    for (var d = 0; d < 2; d++) { var c = makeCard(); cards.push(c); grp.appendChild(c); }
+    clock.appendChild(grp);
+    if (g < 2) clock.appendChild(makeSep());
+  }
+
+  function q(c, s) { return c.querySelector(s + ' span'); }
+  function setDigit(c, v, instant) {
+    var old = c.dataset.v;
+    if (old === v) return;
+    c.dataset.v = v;
+    if (instant) {
+      ['.top', '.bottom', '.f-top', '.f-bot'].forEach(function (s) { q(c, s).textContent = v; });
+      return;
+    }
+    q(c, '.top').textContent = v;          // new value behind
+    q(c, '.bottom').textContent = old;     // old value behind
+    q(c, '.f-top').textContent = old;      // flap falling
+    q(c, '.f-bot').textContent = v;        // flap landing
+    c.classList.remove('go'); void c.offsetWidth; c.classList.add('go');
+    clearTimeout(c._t);
+    c._t = setTimeout(function () {
+      q(c, '.bottom').textContent = v;
+      c.classList.remove('go');
+    }, 620);
+  }
+
+  function tick(instant) {
+    var n = new Date(), h = n.getHours();
+    var pm = h >= 12; h = h % 12 || 12;
+    if (ampm.textContent !== (pm ? 'PM' : 'AM')) ampm.textContent = pm ? 'PM' : 'AM';
+    var s = String(h).padStart(2, '0') + String(n.getMinutes()).padStart(2, '0') + String(n.getSeconds()).padStart(2, '0');
+    for (var i = 0; i < 6; i++) setDigit(cards[i], s[i], instant);
+    var ds = n.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    if (dateEl.textContent !== ds) dateEl.textContent = ds;
+  }
+  tick(true);
+  setInterval(tick, 250);
+  /* double-click anywhere: toggle full screen */
+  document.addEventListener('dblclick', function () {
+    var el = document.documentElement;
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) req.call(el);
+    }
+  });
+
+  /* ---------- Distant ships with running lights ---------- */
+  function lamp(x, y, c, r, cls) {
+    var k = cls ? ' class="' + cls + '"' : '';
+    return '<circle cx="' + x + '" cy="' + y + '" r="' + (r * 3) + '" fill="' + c + '" opacity=".3"' + k + '/><circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="' + c + '"' + k + '/>';
+  }
+  function wins(x0, x1, y, step, h) {
+    var o = '', x;
+    for (x = x0; x < x1; x += step) o += '<rect x="' + x + '" y="' + y + '" width="' + (step * .55) + '" height="' + h + '" fill="' + (Math.random() < .12 ? '#7c6f4a' : '#ffd77e') + '"/>';
+    return o;
+  }
+  function containerShip() {
+    var cols = ['#8a3b2e', '#2f6a8f', '#c58b2a', '#4c7a63', '#8d939e', '#6b3f7a', '#b0452f'], o = '', i, j, n;
+    o += '<path d="M6 54 H272 L298 47 L283 74 H14 L6 70 Z" fill="#1d2233"/><path d="M11 66 H288 L283 74 H14 Z" fill="#6e2127"/>';
+    for (i = 0; i < 17; i++) { n = 2 + Math.floor(Math.random() * 3); for (j = 0; j < n; j++) o += '<rect x="' + (60 + i * 12) + '" y="' + (54 - 8 * (j + 1)) + '" width="10.6" height="7.4" fill="' + cols[Math.floor(Math.random() * cols.length)] + '"/>'; }
+    o += '<rect x="22" y="8" width="12" height="16" fill="#c8312e"/><rect x="10" y="24" width="38" height="30" fill="#d7dce5"/><rect x="14" y="14" width="30" height="10" fill="#cfd5de"/>' +
+         '<rect x="15" y="17" width="28" height="3" fill="#ffd77e"/>' + wins(13, 46, 30, 6, 3) + wins(13, 46, 38, 6, 3) + wins(13, 46, 46, 6, 3) +
+         '<rect x="29.5" y="-2" width="1" height="10" fill="#aab"/><rect x="262" y="38" width="1" height="16" fill="#aab"/>' +
+         lamp(30, -2, '#ff3b3b', 1.8, 'blink') + lamp(262, 38, '#fff6c8', 1.5) + lamp(44, 28, '#3bff7a', 1.4) + lamp(12, 28, '#ff3b3b', 1.4);
+    return o;
+  }
+  function tanker() {
+    var o = '', x;
+    o += '<path d="M4 56 H276 L298 50 L284 75 H12 L4 71 Z" fill="#2b303b"/><path d="M9 67 H288 L284 75 H12 Z" fill="#5d2a22"/>' +
+         '<rect x="46" y="50" width="226" height="3" fill="#161920"/><rect x="46" y="46" width="226" height="1.6" fill="#161920"/>';
+    for (x = 56; x < 260; x += 26) o += '<rect x="' + x + '" y="42" width="8" height="8" fill="#20242d"/>';
+    o += '<rect x="6" y="26" width="34" height="30" fill="#e1e5ec"/><rect x="9" y="18" width="28" height="8" fill="#d2d8e1"/><rect x="10" y="20" width="26" height="3" fill="#ffd77e"/>' +
+         wins(9, 38, 32, 6, 3) + wins(9, 38, 40, 6, 3) + wins(9, 38, 48, 6, 3) +
+         '<rect x="16" y="8" width="10" height="10" fill="#7a808c"/><rect x="16" y="8" width="10" height="2.4" fill="#15171b"/>' +
+         '<rect x="22.5" y="-2" width="1" height="10" fill="#aab"/><rect x="268" y="40" width="1" height="10" fill="#aab"/>' +
+         lamp(23, -2, '#ff3b3b', 1.8, 'blink slow') + lamp(23, 6, '#fff6c8', 1.4) + lamp(268, 40, '#fff6c8', 1.5) + lamp(38, 30, '#3bff7a', 1.4);
+    return o;
+  }
+  function cruiseShip() {
+    var o = '';
+    o += '<path d="M4 56 H272 L298 48 L282 76 H12 L4 70 Z" fill="#e9edf3"/><path d="M8 66 H290 L282 76 H12 Z" fill="#1b2a4a"/>' +
+         '<rect x="24" y="40" width="236" height="16" fill="#eef1f6"/><rect x="46" y="28" width="190" height="12" fill="#e4e8ef"/><rect x="82" y="18" width="116" height="10" fill="#dde2ea"/>' +
+         '<rect x="160" y="4" width="16" height="14" fill="#c8312e"/><rect x="160" y="4" width="16" height="3" fill="#15171b"/>' +
+         wins(28, 258, 44, 6, 3) + wins(28, 258, 50, 6, 2.4) + wins(50, 232, 31, 6, 3) + wins(86, 196, 21, 6, 2.6) +
+         '<rect x="250" y="30" width="1" height="12" fill="#aab"/><rect x="100" y="8" width="1" height="10" fill="#aab"/>' +
+         lamp(100, 8, '#ff3b3b', 1.8, 'blink') + lamp(250, 30, '#fff6c8', 1.5) + lamp(30, 40, '#3bff7a', 1.4) + lamp(274, 52, '#ff3b3b', 1.4);
+    return o;
+  }
+  var SHIPS = [
+    { fn: containerShip, w: 'clamp(210px, 28vw, 450px)', d: 120, rtl: false, off: 0 },
+    { fn: tanker,        w: 'clamp(190px, 25vw, 400px)', d: 140, rtl: true,  off: 3 },
+    { fn: cruiseShip,    w: 'clamp(170px, 21vw, 340px)', d: 130, rtl: false, off: -3 }
+  ];
+  var seaEl = document.getElementById('sea'), shipIdx = -1;
+  function launch(first) {
+    var c, el;
+    shipIdx = (shipIdx + 1) % SHIPS.length;
+    c = SHIPS[shipIdx];
+    el = document.createElement('div');
+    el.className = 'ship' + (c.rtl ? ' rtl' : '');
+    el.setAttribute('aria-hidden', 'true');
+    el.style.cssText = '--w:' + c.w + ';--d:' + c.d + 's;--dl:' + (first ? -c.d * 0.3 : 0) + 's;margin-bottom:' + c.off + 'px';
+    el.innerHTML = '<div' + (c.rtl ? ' class="flip"' : '') + '><svg viewBox="0 -8 300 88" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">' + c.fn() + '</svg></div>';
+    el.addEventListener('animationend', function (e) {
+      if (e.target !== el) return;
+      el.remove();
+      setTimeout(launch, 6000);      // short pause, then the next ship
+    });
+    document.body.insertBefore(el, seaEl);
+  }
+  launch(true);
+
+  /* ---------- Stars ---------- */
+  var cv = document.getElementById('stars'), cx = cv.getContext('2d'), stars = [];
+  function sizeStars() {
+    var r = window.devicePixelRatio || 1;
+    cv.width = innerWidth * r; cv.height = innerHeight * r;
+    cx.setTransform(r, 0, 0, r, 0, 0);
+    stars = [];
+    var n = Math.floor(innerWidth * innerHeight / 5000);
+    for (var i = 0; i < n; i++) stars.push({
+      x: Math.random() * innerWidth, y: Math.random() * innerHeight,
+      r: Math.random() * 1.2 + .2, p: Math.random() * 6.28, s: Math.random() * .8 + .2
+    });
+  }
+  function drawStars(t) {
+    cx.clearRect(0, 0, innerWidth, innerHeight);
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      cx.globalAlpha = .35 + .35 * Math.sin(t / 1000 * s.s + s.p);
+      cx.fillStyle = '#dfe8ff';
+      cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, 6.28); cx.fill();
+    }
+  }
+  addEventListener('resize', sizeStars);
+  sizeStars();
+  (function loop(now) { drawStars(now || 0); requestAnimationFrame(loop); })();
+})();
+</script>
+</body>
+</html>
